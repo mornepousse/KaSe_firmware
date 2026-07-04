@@ -424,6 +424,9 @@ static const uint16_t TO_L9 = 0x1400;
 #define K_IS_SEC(kc)                 (((kc) & 0xFF00) == K_SEC_BASE)
 #define K_SEC_TYPE(kc)               ((kc) & 0xFF)
 
+/* Display: cycle l'écran OLED de repos (HOME→STATS→TAMA) — 0x3F00 (libre) */
+#define K_DISP_NEXT                  0x3F00
+
 /* Layer-Tap: hold = activate layer, tap = send keycode */
 #define K_LT_BASE                    0x4000
 #define K_LT(layer, kc)             (K_LT_BASE | ((layer) << 8) | (kc))

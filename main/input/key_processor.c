@@ -243,6 +243,7 @@ static uint8_t process_advanced_key(uint16_t kc, uint8_t row, uint8_t col)
      * authorization, like the K_TAMA_* actions below. (Pentest 2026-06-25.) */
     if (kc == K_SEC_CONFIRM) { if (is_new_press(row, col)) sec_confirm_authorize(); return 0; }
     if (kc == K_LAYER_LOCK){ layer_lock_toggle(); return 0; }
+    if (kc == K_DISP_NEXT) { if (is_new_press(row, col)) km_post_display_next(); return 0; }
     if (kc == K_TAMA_FEED)     { if (is_new_press(row, col)) tama_engine_action(TAMA2_ACTION_FEED); return 0; }
     if (kc == K_TAMA_PLAY)     { if (is_new_press(row, col)) tama_engine_action(TAMA2_ACTION_PLAY); return 0; }
     if (kc == K_TAMA_SLEEP)    { if (is_new_press(row, col)) tama_engine_action(TAMA2_ACTION_SLEEP); return 0; }

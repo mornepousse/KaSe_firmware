@@ -13,6 +13,7 @@ typedef enum {
     KM_EVENT_NONE = 0,
     KM_EVENT_DISPLAY_UPDATE = 1,
     KM_EVENT_BT_TOGGLE = 2,
+    KM_EVENT_DISPLAY_NEXT = 3,
 } km_event_t;
 
 static QueueHandle_t km_queue = NULL;
@@ -25,6 +26,9 @@ static void km_worker_task(void *pvParameters) {
             switch (ev) {
                 case KM_EVENT_DISPLAY_UPDATE:
                     status_display_refresh_all();
+                    break;
+                case KM_EVENT_DISPLAY_NEXT:
+                    status_display_notify_display_key();
                     break;
                 case KM_EVENT_BT_TOGGLE:
                     ESP_LOGI(KW_TAG, "Processing KM_EVENT_BT_TOGGLE");
@@ -63,6 +67,12 @@ void keyboard_worker_init(void) {
 void km_post_display_update(void) {
     if (!km_queue) return;
     km_event_t ev = KM_EVENT_DISPLAY_UPDATE;
+    xQueueSend(km_queue, &ev, 0);
+}
+
+void km_post_display_next(void) {
+    if (!km_queue) return;
+    km_event_t ev = KM_EVENT_DISPLAY_NEXT;
     xQueueSend(km_queue, &ev, 0);
 }
 

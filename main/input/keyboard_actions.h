@@ -3,4 +3,5 @@
 
 void keyboard_worker_init(void);
 void km_post_display_update(void);
+void km_post_display_next(void);
 void km_post_bt_toggle(void);

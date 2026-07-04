@@ -116,6 +116,7 @@ void save_io_mode(uint8_t m)            { (void)m; }
 /* ── Stubs keyboard_actions.h + keyboard_task.h ──────────────────────── */
 
 void km_post_display_update(void)  {}
+void km_post_display_next(void)    {}
 void km_post_bt_toggle(void)       {}
 void keyboard_worker_init(void)    {}
 void vTaskKeyboard(void *pv)       { (void)pv; }
