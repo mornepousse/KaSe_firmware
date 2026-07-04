@@ -30,6 +30,7 @@ dans la PR/release.
 - [ ] Idle avec tama désactivé → reste sur l'écran de repos
 - [ ] Pas de scintillement / rebuild en boucle entre deux écrans ; pas de reliquat (sprite tama) par-dessus l'écran suivant
 - [ ] Sleep/wake : l'écran se reconstruit correctement au réveil
+- [ ] Presser une touche BT (switch/pair) pendant que HOME s'affiche → pas de crash, l'écran se reconstruit
 
 ## Dongle
 - [ ] Lien RF s'établit avec une half (pairing < 120s)

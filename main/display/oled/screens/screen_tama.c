@@ -132,11 +132,16 @@ static void destroy(void)
 {
     tama_render_destroy();
 
-    if (s_level_lbl)  { lv_obj_del(s_level_lbl);  s_level_lbl  = NULL; }
-    if (s_happy_bar)  { lv_obj_del(s_happy_bar);   s_happy_bar  = NULL; }
-    if (s_happy_lbl)  { lv_obj_del(s_happy_lbl);   s_happy_lbl  = NULL; }
-    if (s_hunger_bar) { lv_obj_del(s_hunger_bar);  s_hunger_bar = NULL; }
-    if (s_hunger_lbl) { lv_obj_del(s_hunger_lbl);  s_hunger_lbl = NULL; }
+    if (s_level_lbl  && lv_obj_is_valid(s_level_lbl))  lv_obj_del(s_level_lbl);
+    s_level_lbl = NULL;
+    if (s_happy_bar  && lv_obj_is_valid(s_happy_bar))  lv_obj_del(s_happy_bar);
+    s_happy_bar = NULL;
+    if (s_happy_lbl  && lv_obj_is_valid(s_happy_lbl))  lv_obj_del(s_happy_lbl);
+    s_happy_lbl = NULL;
+    if (s_hunger_bar && lv_obj_is_valid(s_hunger_bar)) lv_obj_del(s_hunger_bar);
+    s_hunger_bar = NULL;
+    if (s_hunger_lbl && lv_obj_is_valid(s_hunger_lbl)) lv_obj_del(s_hunger_lbl);
+    s_hunger_lbl = NULL;
 }
 
 const oled_screen_t screen_tama = { build, update, destroy };

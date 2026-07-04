@@ -28,14 +28,10 @@ static void update(void) {}
 
 static void destroy(void)
 {
-    if (label_name) {
-        lv_obj_del(label_name);
-        label_name = NULL;
-    }
-    if (label_version) {
-        lv_obj_del(label_version);
-        label_version = NULL;
-    }
+    if (label_name && lv_obj_is_valid(label_name)) lv_obj_del(label_name);
+    label_name = NULL;
+    if (label_version && lv_obj_is_valid(label_version)) lv_obj_del(label_version);
+    label_version = NULL;
 }
 
 const oled_screen_t screen_splash = { build, update, destroy };

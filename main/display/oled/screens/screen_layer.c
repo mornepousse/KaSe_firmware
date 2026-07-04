@@ -68,8 +68,10 @@ static void update(void)
 
 static void destroy(void)
 {
-    if (s_big_label) { lv_obj_del(s_big_label); s_big_label = NULL; }
-    if (s_sub_label) { lv_obj_del(s_sub_label); s_sub_label = NULL; }
+    if (s_big_label && lv_obj_is_valid(s_big_label)) lv_obj_del(s_big_label);
+    s_big_label = NULL;
+    if (s_sub_label && lv_obj_is_valid(s_sub_label)) lv_obj_del(s_sub_label);
+    s_sub_label = NULL;
 }
 
 const oled_screen_t screen_layer = { build, update, destroy };

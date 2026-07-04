@@ -199,15 +199,22 @@ static void update(void)
 
 static void destroy(void)
 {
-    if (s_kpm_bar)     { lv_obj_del(s_kpm_bar);     s_kpm_bar     = NULL; }
+    if (s_kpm_bar     && lv_obj_is_valid(s_kpm_bar))     lv_obj_del(s_kpm_bar);
+    s_kpm_bar = NULL;
     /* s_layer_label est enfant de s_layer_card → supprimé par son parent */
-    if (s_layer_card)  { lv_obj_del(s_layer_card);  s_layer_card  = NULL; }
+    if (s_layer_card  && lv_obj_is_valid(s_layer_card))  lv_obj_del(s_layer_card);
+    s_layer_card  = NULL;
     s_layer_label = NULL;
-    if (s_caps)        { lv_obj_del(s_caps);         s_caps        = NULL; }
-    if (s_bt_slot)     { lv_obj_del(s_bt_slot);      s_bt_slot     = NULL; }
-    if (s_icon_bt)     { lv_obj_del(s_icon_bt);      s_icon_bt     = NULL; }
-    if (s_icon_path)   { lv_obj_del(s_icon_path);    s_icon_path   = NULL; }
-    if (s_status_card) { lv_obj_del(s_status_card);  s_status_card = NULL; }
+    if (s_caps        && lv_obj_is_valid(s_caps))        lv_obj_del(s_caps);
+    s_caps = NULL;
+    if (s_bt_slot     && lv_obj_is_valid(s_bt_slot))     lv_obj_del(s_bt_slot);
+    s_bt_slot = NULL;
+    if (s_icon_bt     && lv_obj_is_valid(s_icon_bt))     lv_obj_del(s_icon_bt);
+    s_icon_bt = NULL;
+    if (s_icon_path   && lv_obj_is_valid(s_icon_path))   lv_obj_del(s_icon_path);
+    s_icon_path = NULL;
+    if (s_status_card && lv_obj_is_valid(s_status_card)) lv_obj_del(s_status_card);
+    s_status_card = NULL;
 }
 
 const oled_screen_t screen_home = { build, update, destroy };

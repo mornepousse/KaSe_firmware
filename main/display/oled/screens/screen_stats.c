@@ -142,11 +142,15 @@ static void update(void)
 
 static void destroy(void)
 {
-    if (s_kpm_label)   { lv_obj_del(s_kpm_label);   s_kpm_label   = NULL; }
-    if (s_wpm_label)   { lv_obj_del(s_wpm_label);   s_wpm_label   = NULL; }
-    if (s_total_label) { lv_obj_del(s_total_label); s_total_label = NULL; }
+    if (s_kpm_label   && lv_obj_is_valid(s_kpm_label))   lv_obj_del(s_kpm_label);
+    s_kpm_label = NULL;
+    if (s_wpm_label   && lv_obj_is_valid(s_wpm_label))   lv_obj_del(s_wpm_label);
+    s_wpm_label = NULL;
+    if (s_total_label && lv_obj_is_valid(s_total_label)) lv_obj_del(s_total_label);
+    s_total_label = NULL;
     for (int i = 0; i < SS_N_BARS; i++) {
-        if (s_bars[i]) { lv_obj_del(s_bars[i]); s_bars[i] = NULL; }
+        if (s_bars[i] && lv_obj_is_valid(s_bars[i])) lv_obj_del(s_bars[i]);
+        s_bars[i] = NULL;
     }
 }
 

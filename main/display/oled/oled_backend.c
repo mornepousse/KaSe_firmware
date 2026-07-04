@@ -65,8 +65,8 @@ static void oled_refresh_all(void)
 {
     if (!display_available) return;
     if (!lvgl_port_lock(200)) return;
-    display_clear_screen();
     oled_screens_reset(now_ms());
+    display_clear_screen();
     oled_initialized = true;
     lvgl_port_unlock();
 }
