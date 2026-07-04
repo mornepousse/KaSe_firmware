@@ -135,8 +135,10 @@ static void oled_notify_display_key(void)
 
 static void oled_show_dfu(void)
 {
-    display_clear_screen();
+    /* display_clear_screen() fait un lv_obj_clean (écriture LVGL) → doit être
+     * SOUS le lock, comme les autres chemins du backend (cohérence lock). */
     if (lvgl_port_lock(0)) {
+        display_clear_screen();
         lv_obj_t *label = lv_label_create(lv_scr_act());
         lv_obj_set_style_text_font(label, &lv_font_montserrat_28, 0);
         lv_label_set_text(label, "DFU");
