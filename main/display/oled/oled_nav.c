@@ -23,11 +23,24 @@ oled_screen_id_t oled_nav_active(uint32_t now_ms) {
     return s_resting;
 }
 
+static oled_screen_id_t next_resting(oled_screen_id_t r) {
+    switch (r) {
+    case OLED_SCR_HOME:  return OLED_SCR_STATS;
+    case OLED_SCR_STATS: return OLED_SCR_TAMA;
+    default:             return OLED_SCR_HOME;   /* TAMA (ou autre) → HOME */
+    }
+}
+
 void oled_nav_event(oled_nav_event_t ev, uint32_t now_ms) {
     switch (ev) {
     case OLED_EV_BOOT:          s_splash_until = now_ms + OLED_NAV_SPLASH_MS; break;
     case OLED_EV_LAYER_CHANGED: s_flash_until  = now_ms + OLED_NAV_FLASH_MS;  break;
     case OLED_EV_ACTIVITY:      s_last_activity = now_ms;                     break;
-    case OLED_EV_DISP_KEY:      /* filled in Task 3 */                        break;
+    case OLED_EV_DISP_KEY:
+        s_resting       = next_resting(s_resting);
+        s_splash_until  = 0;   /* couper splash */
+        s_flash_until   = 0;   /* couper flash */
+        s_last_activity = now_ms;
+        break;
     }
 }
