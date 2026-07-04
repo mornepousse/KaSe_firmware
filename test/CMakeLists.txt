@@ -79,6 +79,8 @@ add_executable(test_runner
     test_cfg_bridge.c
     ../main/comm/rf/cfg_bridge.c
     test_kbd_route.c
+    test_oled_nav.c
+    ../main/display/oled/oled_nav.c
     test_main.c
 )
 
@@ -95,4 +97,5 @@ target_include_directories(test_runner PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/led
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/security
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/comm/cdc
+    ${CMAKE_CURRENT_SOURCE_DIR}/../main/display/oled
 )

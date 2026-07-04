@@ -11,6 +11,7 @@ extern void test_bigram(void);
 extern void test_board_config(void);
 extern void test_matrix_constants(void);
 extern void test_led_anim_constants(void);
+extern void test_oled_nav(void);
 extern void test_keymap_nvs(void);
 extern void test_keycodes(void);
 extern void test_key_features(void);
@@ -58,6 +59,7 @@ int main(void) {
     test_board_config();
     test_matrix_constants();
     test_led_anim_constants();
+    test_oled_nav();
     test_keymap_nvs();
     test_keycodes();
     test_key_features();
