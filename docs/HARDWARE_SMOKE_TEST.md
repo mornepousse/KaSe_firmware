@@ -17,8 +17,19 @@ dans la PR/release.
 - [ ] Tama : sprite s'affiche et réagit
 
 ## V2 / V2D (OLED I2C)
-- [ ] OLED SSD1306 affiche le dashboard sans artefact
+- [ ] OLED SSD1306 affiche sans artefact
 - [ ] V2D : COLS7/8 (GPIO21/4) scannent correctement
+
+## OLED refonte multi-écrans (V2 / V2D)
+- [ ] Boot : splash « KaSe » + version ~2s, puis HOME
+- [ ] HOME : connexion (USB/BLE/RF + slot), couche active, caps, KPM
+- [ ] Changement de couche → écran LAYER (nom en grand) ~2.5s puis retour
+- [ ] Keycode K_DISP_NEXT : cycle HOME → STATS → TAMA → HOME
+- [ ] STATS : KPM/WPM bougent en tapant, sparkline se remplit, total croît
+- [ ] Idle ~30s (tama activé) → écran TAMA ; 1ʳᵉ frappe → retour écran de repos
+- [ ] Idle avec tama désactivé → reste sur l'écran de repos
+- [ ] Pas de scintillement / rebuild en boucle entre deux écrans ; pas de reliquat (sprite tama) par-dessus l'écran suivant
+- [ ] Sleep/wake : l'écran se reconstruit correctement au réveil
 
 ## Dongle
 - [ ] Lien RF s'établit avec une half (pairing < 120s)
