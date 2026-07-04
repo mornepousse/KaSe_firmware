@@ -14,6 +14,7 @@ void status_display_update_layer_name(void);
 void status_display_show_DFU_prog(void);
 void status_display_notify_mouse_activity(void);
 void status_display_notify_keypress(void);
+void status_display_notify_display_key(void);
 
 /* Request a wake/refresh from another task context */
 extern volatile bool request_wake_request;

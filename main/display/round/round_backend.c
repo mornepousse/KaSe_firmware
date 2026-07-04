@@ -40,6 +40,7 @@ const display_backend_t round_display_backend = {
     .sleep         = round_sleep,
     .wake          = round_wake,
     .notify_mouse    = round_notify_mouse,
-    .notify_keypress = round_ui_notify_keypress,
-    .show_dfu        = round_show_dfu,
+    .notify_keypress     = round_ui_notify_keypress,
+    .notify_display_key  = NULL,
+    .show_dfu            = round_show_dfu,
 };

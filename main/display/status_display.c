@@ -110,3 +110,9 @@ void status_display_notify_keypress(void)
 {
     if (backend && backend->notify_keypress) backend->notify_keypress();
 }
+
+void status_display_notify_display_key(void)
+{
+    const display_backend_t *b = display_get_backend();
+    if (b && b->notify_display_key) b->notify_display_key();
+}
