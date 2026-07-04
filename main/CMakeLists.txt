@@ -60,6 +60,15 @@ if(CONFIG_KASE_HAS_DISPLAY)
         list(APPEND srcs
             "display/oled/i2c_oled_display.c"
             "display/oled/oled_backend.c"
+            "display/oled/oled_nav.c"
+            "display/oled/oled_stats.c"
+            "display/oled/oled_kpm.c"
+            "display/oled/oled_screens.c"
+            "display/oled/screens/screen_splash.c"
+            "display/oled/screens/screen_home.c"
+            "display/oled/screens/screen_layer.c"
+            "display/oled/screens/screen_stats.c"
+            "display/oled/screens/screen_tama.c"
         )
     endif()
     list(APPEND srcs
@@ -263,6 +272,7 @@ idf_component_register(
         "security"
         "display"
         "display/oled"
+        "display/oled/screens"
         "display/round"
         "led"
         "display/assets"
