@@ -75,6 +75,11 @@ void oled_screens_tick(uint32_t now_ms)
     if (id != s_current) {
         if (s_current < OLED_SCR_COUNT)
             s_screens[s_current]->destroy();
+        /* Surface propre avant le build : certains renderers (tama_render) ne
+         * suppriment pas eux-mêmes leurs objets LVGL dans destroy() → sans ce
+         * clean, un reliquat de l'écran précédent resterait par-dessus le
+         * nouveau. Garantit une table rase quel que soit le screen sortant. */
+        lv_obj_clean(lv_scr_act());
         s_screens[id]->build(lv_scr_act());
         s_current = id;
     }
