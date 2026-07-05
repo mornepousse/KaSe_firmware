@@ -22,14 +22,17 @@ dans la PR/release.
 
 ## OLED refonte multi-écrans (V2 / V2D)
 - [ ] Boot : splash « KaSe » + version ~2s, puis HOME
-- [ ] HOME : connexion (USB/BLE/RF + slot), couche active, caps, KPM
-- [ ] Changement de couche → écran LAYER (nom en grand) ~2.5s puis retour
-- [ ] Keycode K_DISP_NEXT : cycle HOME → STATS → TAMA → HOME
+- [ ] Splash UNIQUEMENT au boot : éteindre/rallumer l'écran (veille→réveil) → PAS de splash, retour direct sur HOME
+- [ ] HOME (dashboard dense) : connexion (USB/BLE/RF + slot) + caps ; nom de couche ; KPM ; barres tama faim/joie ; **sprite du pet à droite**
+- [ ] Changement de couche → HOME met à jour son champ couche (PLUS d'écran LAYER plein écran)
+- [ ] Rien ne déborde / ne se chevauche sur aucun écran (texte, sprite, barres)
+- [ ] Sprites tama = style rempli (pas de contour), lisibles ; le pet respire/cligne
+- [ ] Touche K_DISP_NEXT (0x3F00, à mapper) : cycle HOME → STATS → TAMA → HOME
 - [ ] STATS : KPM/WPM bougent en tapant, sparkline se remplit, total croît
-- [ ] Idle ~30s (tama activé) → écran TAMA ; 1ʳᵉ frappe → retour écran de repos
-- [ ] Idle avec tama désactivé → reste sur l'écran de repos
-- [ ] Pas de scintillement / rebuild en boucle entre deux écrans ; pas de reliquat (sprite tama) par-dessus l'écran suivant
-- [ ] Sleep/wake : l'écran se reconstruit correctement au réveil
+- [ ] Idle ~10s (tama activé) → écran TAMA (sprite + barres + niveau, sans chevauchement) ; 1ʳᵉ frappe → retour HOME
+- [ ] V2D : écran s'éteint à ~30s d'inactivité (> 10s → le TAMA a le temps de s'afficher) ; réveil à la 1ʳᵉ frappe
+- [ ] Idle avec tama désactivé → reste sur HOME (pas de TAMA), pas de barres/sprite tama sur HOME
+- [ ] Pas de scintillement / rebuild en boucle ; pas de reliquat (sprite tama) par-dessus l'écran suivant
 - [ ] Presser une touche BT (switch/pair) pendant que HOME s'affiche → pas de crash, l'écran se reconstruit
 
 ## Dongle
