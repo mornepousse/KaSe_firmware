@@ -23,13 +23,13 @@
 
 /* ── Constantes de layout ────────────────────────────────────────────────── */
 
-#define ST_BAR_X        16   /* début des barres (après étiquette 2 chars) */
-#define ST_BAR_W        (BOARD_DISPLAY_WIDTH - ST_BAR_X - 2)   /* ~110px */
+#define ST_BAR_X         2   /* barres quasi pleine largeur (pas de label H/J) */
+#define ST_BAR_W        (BOARD_DISPLAY_WIDTH - ST_BAR_X - 2)   /* 124px */
 #define ST_BAR_H         6
 #define ST_BAR_RADIUS    2
-#define ST_HUNGER_Y     44
-#define ST_HAPPY_Y      52
-#define ST_LABEL_Y      60
+#define ST_HUNGER_Y     36
+#define ST_HAPPY_Y      43
+#define ST_LABEL_Y      50   /* font_14 → 50..64, ne déborde plus */
 #define ST_STAT_MAX     TAMA2_STAT_MAX   /* 1000 */
 
 /* ── Pointeurs statiques ─────────────────────────────────────────────────── */
@@ -80,13 +80,10 @@ static void build(lv_obj_t *parent)
      * lui-même dans les 44 premières lignes environ selon le critter. */
     tama_render_create(parent, BOARD_DISPLAY_WIDTH, BOARD_DISPLAY_HEIGHT);
 
-    /* Barre faim */
-    s_hunger_lbl = make_stat_label(parent, "H", ST_HUNGER_Y);
+    /* Barres faim / bonheur (pleine largeur, pas de label H/J — trop haut en
+     * font_14 et écrasait la barre ; la faim est en haut, le bonheur en dessous). */
     s_hunger_bar = make_stat_bar(parent, ST_HUNGER_Y);
-
-    /* Barre bonheur */
-    s_happy_lbl = make_stat_label(parent, "J", ST_HAPPY_Y);
-    s_happy_bar = make_stat_bar(parent, ST_HAPPY_Y);
+    s_happy_bar  = make_stat_bar(parent, ST_HAPPY_Y);
 
     /* Label niveau + XP */
     s_level_lbl = lv_label_create(parent);

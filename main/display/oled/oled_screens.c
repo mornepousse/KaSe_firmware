@@ -80,6 +80,7 @@ void oled_screens_tick(uint32_t now_ms)
          * clean, un reliquat de l'écran précédent resterait par-dessus le
          * nouveau. Garantit une table rase quel que soit le screen sortant. */
         lv_obj_clean(lv_scr_act());
+        lv_obj_clear_flag(lv_scr_act(), LV_OBJ_FLAG_SCROLLABLE);  /* pas de scrollbar/pan */
         s_screens[id]->build(lv_scr_act());
         s_current = id;
     }

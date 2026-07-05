@@ -34,10 +34,10 @@
 
 #define SS_TOP_H            14     /* hauteur zone top (px)                    */
 #define SS_SPARK_Y          15     /* y de départ de la zone sparkline         */
-#define SS_SPARK_H          36     /* hauteur de la zone sparkline (px)        */
-#define SS_SPARK_BOTTOM     (SS_SPARK_Y + SS_SPARK_H) /* = 51, ligne de base  */
-#define SS_PX_PER_UNIT       5     /* px par unité barre (0..7 → 0..35 px)    */
-#define SS_BOTTOM_Y         52     /* y de la zone total keystrokes            */
+#define SS_SPARK_H          31     /* hauteur de la zone sparkline (px)        */
+#define SS_SPARK_BOTTOM     (SS_SPARK_Y + SS_SPARK_H) /* = 46, ligne de base  */
+#define SS_PX_PER_UNIT       4     /* px par unité barre (0..7 → 0..28 px)    */
+#define SS_BOTTOM_Y         48     /* y du total : 48+14=62 < 64, plus de clip */
 
 /* ── Pointeurs statiques vers les objets LVGL ────────────────────────── */
 
@@ -110,15 +110,21 @@ static void update(void)
 
     /* 1. Labels KPM / WPM ─────────────────────────────────────────────── */
     if (s_kpm_label)
-        lv_label_set_text_fmt(s_kpm_label, "KPM %lu", (unsigned long)kpm);
+        lv_label_set_text_fmt(s_kpm_label, "%lukpm  %luwpm",
+                              (unsigned long)kpm, (unsigned long)wpm);
     if (s_wpm_label)
-        lv_label_set_text_fmt(s_wpm_label, "%lu wpm", (unsigned long)wpm);
+        lv_label_set_text(s_wpm_label, "");   /* fusionné dans s_kpm_label */
 
     /* 2. Sparkline ────────────────────────────────────────────────────── */
     {
         const uint32_t *hist = oled_kpm_history();
+        /* Auto-échelle sur le pic de la fenêtre (échantillons = frappes/seconde
+         * ~3..25, pas le KPM cumulé) ; plancher 8 pour ne pas amplifier le bruit. */
+        uint32_t hmax = 8;
+        for (int i = 0; i < (int)OLED_KPM_WINDOW; i++)
+            if (hist[i] > hmax) hmax = hist[i];
         uint8_t heights[SS_N_BARS];
-        oled_sparkline_bars(hist, (int)OLED_KPM_WINDOW, OLED_KPM_MAX,
+        oled_sparkline_bars(hist, (int)OLED_KPM_WINDOW, hmax,
                             heights, SS_N_BARS);
         for (int i = 0; i < SS_N_BARS; i++) {
             if (!s_bars[i]) continue;
