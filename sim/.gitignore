@@ -1,7 +1,9 @@
 liblvgl.a
 obj/
 render_screens
+render_sprites
+gen_critters
+gen_sprite
 oled_sim
-out.png
-img_*.png
+*.png
 stb_image_write.h

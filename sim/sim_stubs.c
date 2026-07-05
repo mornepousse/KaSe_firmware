@@ -9,6 +9,7 @@
 #include "esp_app_desc.h"
 #include "tama_engine.h"
 #include "tama_render.h"
+#include "tama_sprites.h"   /* vrais sprites (main/tama) pour un rendu fidèle */
 
 /* ── Données ─────────────────────────────────────────────────────── */
 uint8_t current_layout = 5;  /* GAMING (nom long, test débordement) */
@@ -41,22 +42,23 @@ const tama2_stats_t *tama_engine_get_stats(void) { return &s_stats; }
 uint8_t tama_engine_get_critter(void)          { return 0; }
 bool tama_engine_is_enabled(void)              { return true; }
 
-static lv_obj_t *s_pet = NULL;
+/* Rend le VRAI sprite (32×32 1-bit) à la vraie position OLED (96,20), comme
+ * tama_render.c. Critter de démo = index 8 (assez évolué pour montrer oreilles
+ * /yeux/pattes). */
+static lv_obj_t   *s_pet = NULL;
+static lv_img_dsc_t s_pet_dsc;
 void tama_render_create(lv_obj_t *parent, uint16_t w, uint16_t h)
 {
     (void)w; (void)h;
-    s_pet = lv_obj_create(parent);
-    /* Vraie position du sprite OLED (tama_render.c) : 32×32 fixé à (96,20). */
-    lv_obj_set_size(s_pet, 32, 32);
+    s_pet_dsc.header.always_zero = 0;
+    s_pet_dsc.header.cf = LV_IMG_CF_ALPHA_1BIT;
+    s_pet_dsc.header.w = TAMA_SPRITE_W;
+    s_pet_dsc.header.h = TAMA_SPRITE_H;
+    s_pet_dsc.data_size = TAMA_SPRITE_BYTES;
+    s_pet_dsc.data = tama_critters[8].main_frame;
+    s_pet = lv_img_create(parent);
+    lv_img_set_src(s_pet, &s_pet_dsc);
     lv_obj_set_pos(s_pet, 96, 20);
-    lv_obj_set_style_bg_opa(s_pet, LV_OPA_0, 0);
-    lv_obj_set_style_border_width(s_pet, 1, 0);
-    lv_obj_set_style_border_color(s_pet, lv_color_black(), 0);
-    lv_obj_set_style_radius(s_pet, 0, 0);
-    lv_obj_clear_flag(s_pet, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *l = lv_label_create(s_pet);
-    lv_label_set_text(l, "pet");
-    lv_obj_center(l);
 }
 void tama_render_update(tama2_state_t s, const tama2_stats_t *st, uint8_t c) { (void)s;(void)st;(void)c; }
 void tama_render_destroy(void) { if (s_pet) { lv_obj_del(s_pet); s_pet = NULL; } }
