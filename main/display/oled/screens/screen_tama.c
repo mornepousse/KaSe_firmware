@@ -36,9 +36,7 @@
 
 /* ── Pointeurs statiques ─────────────────────────────────────────────────── */
 
-static lv_obj_t *s_hunger_lbl  = NULL;
 static lv_obj_t *s_hunger_bar  = NULL;
-static lv_obj_t *s_happy_lbl   = NULL;
 static lv_obj_t *s_happy_bar   = NULL;
 static lv_obj_t *s_level_lbl   = NULL;
 
@@ -63,15 +61,6 @@ static lv_obj_t *make_stat_bar(lv_obj_t *parent, int y)
     lv_obj_set_style_bg_opa(bar,      LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_radius(bar,      ST_BAR_RADIUS, LV_PART_INDICATOR);
     return bar;
-}
-
-static lv_obj_t *make_stat_label(lv_obj_t *parent, const char *text, int y)
-{
-    lv_obj_t *lbl = lv_label_create(parent);
-    lv_obj_set_style_text_font(lbl, UI_FONT, 0);
-    lv_label_set_text(lbl, text);
-    lv_obj_set_pos(lbl, 0, y);
-    return lbl;
 }
 
 /* ── build ───────────────────────────────────────────────────────────────── */
@@ -135,12 +124,8 @@ static void destroy(void)
     s_level_lbl = NULL;
     if (s_happy_bar  && lv_obj_is_valid(s_happy_bar))  lv_obj_del(s_happy_bar);
     s_happy_bar = NULL;
-    if (s_happy_lbl  && lv_obj_is_valid(s_happy_lbl))  lv_obj_del(s_happy_lbl);
-    s_happy_lbl = NULL;
     if (s_hunger_bar && lv_obj_is_valid(s_hunger_bar)) lv_obj_del(s_hunger_bar);
     s_hunger_bar = NULL;
-    if (s_hunger_lbl && lv_obj_is_valid(s_hunger_lbl)) lv_obj_del(s_hunger_lbl);
-    s_hunger_lbl = NULL;
 }
 
 const oled_screen_t screen_tama = { build, update, destroy };
