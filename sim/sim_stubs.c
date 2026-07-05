@@ -46,8 +46,9 @@ void tama_render_create(lv_obj_t *parent, uint16_t w, uint16_t h)
 {
     (void)w; (void)h;
     s_pet = lv_obj_create(parent);
-    lv_obj_set_size(s_pet, 44, 30);
-    lv_obj_align(s_pet, LV_ALIGN_TOP_MID, 0, 2);
+    /* Vraie position du sprite OLED (tama_render.c) : 32×32 fixé à (96,20). */
+    lv_obj_set_size(s_pet, 32, 32);
+    lv_obj_set_pos(s_pet, 96, 20);
     lv_obj_set_style_bg_opa(s_pet, LV_OPA_0, 0);
     lv_obj_set_style_border_width(s_pet, 1, 0);
     lv_obj_set_style_border_color(s_pet, lv_color_black(), 0);

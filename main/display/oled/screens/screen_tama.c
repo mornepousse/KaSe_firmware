@@ -1,13 +1,15 @@
-/* screen_tama.c — Écran TAMA : pet plein écran (128×64 mono SSD1306).
+/* screen_tama.c — Écran TAMA (128×64 mono SSD1306).
+ *
+ * IMPORTANT : sur OLED, tama_render (tama_render.c) dessine le sprite 32×32
+ * FIXÉ en bas-droite à (96,20) → il occupe x=96..128, y=20..52, et ne dessine
+ * PAS de barres. Donc nos barres/niveau vivent dans la COLONNE GAUCHE (x=2..90)
+ * pour ne pas chevaucher le sprite.
  *
  * Layout :
- *   y=0..43  : sprite du pet (tama_render_create pleine largeur/hauteur sprite)
- *   y=44..51 : barre faim   (étiquette "H" + lv_bar 104px)
- *   y=52..59 : barre bonheur (étiquette "J" + lv_bar 104px)
- *   y=60..63 : label "Lv<n>  <xp>xp" (bas de l'écran)
- *
- * tama_render_create/update/destroy gèrent le sprite lui-même.
- * Ce fichier crée par-dessus les barres de stat et le label niveau.
+ *   sprite    : x=96..128, y=20..52   (tama_render, à droite)
+ *   y=24..30  : barre faim    (gauche, x=2..90)
+ *   y=38..44  : barre bonheur (gauche, x=2..90)
+ *   y=50..63  : label "Lv<n> <xp>xp" (gauche)
  *
  * Contrat build/update/destroy :
  *   build(parent)  — lock déjà tenu par l'appelant (manager).
@@ -23,13 +25,13 @@
 
 /* ── Constantes de layout ────────────────────────────────────────────────── */
 
-#define ST_BAR_X         2   /* barres quasi pleine largeur (pas de label H/J) */
-#define ST_BAR_W        (BOARD_DISPLAY_WIDTH - ST_BAR_X - 2)   /* 124px */
-#define ST_BAR_H         6
+#define ST_BAR_X         2   /* colonne gauche — le sprite occupe x=96..128 */
+#define ST_BAR_W        88   /* x=2..90, s'arrête avant le sprite (x=96)      */
+#define ST_BAR_H         7
 #define ST_BAR_RADIUS    2
-#define ST_HUNGER_Y     36
-#define ST_HAPPY_Y      43
-#define ST_LABEL_Y      50   /* font_14 → 50..64, ne déborde plus */
+#define ST_HUNGER_Y     24
+#define ST_HAPPY_Y      38
+#define ST_LABEL_Y      50   /* font_14 → 50..64 */
 #define ST_STAT_MAX     TAMA2_STAT_MAX   /* 1000 */
 
 /* ── Pointeurs statiques ─────────────────────────────────────────────────── */
