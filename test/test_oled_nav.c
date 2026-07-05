@@ -27,12 +27,12 @@ static void test_nav_layer_change_is_activity(void) {
     oled_nav_init(0);
     oled_nav_set_tama_enabled(true);
     oled_nav_event(OLED_EV_ACTIVITY, 0);
-    /* Sans rien, à 35000 on serait en idle→TAMA. Un changement de couche à
-       20000 remet le minuteur → à 40000 (20s après) toujours HOME. */
+    /* Un changement de couche à t=20000 remet le minuteur d'inactivité :
+       juste avant le seuil suivant → toujours HOME ; au seuil → TAMA. */
     oled_nav_event(OLED_EV_LAYER_CHANGED, 20000);
     TEST_ASSERT_EQ(oled_nav_active(20000), OLED_SCR_HOME, "changement de couche → reste HOME");
-    TEST_ASSERT_EQ(oled_nav_active(40000), OLED_SCR_HOME, "layer-change a remis l'idle (pas TAMA)");
-    TEST_ASSERT_EQ(oled_nav_active(50001), OLED_SCR_TAMA, "30s après le layer-change → TAMA");
+    TEST_ASSERT_EQ(oled_nav_active(20000 + OLED_NAV_IDLE_MS - 1), OLED_SCR_HOME, "layer-change a remis l'idle (pas TAMA)");
+    TEST_ASSERT_EQ(oled_nav_active(20000 + OLED_NAV_IDLE_MS),     OLED_SCR_TAMA, "seuil après le layer-change → TAMA");
 }
 
 /* L'activité ne change jamais l'écran. */
@@ -71,10 +71,10 @@ static void test_nav_idle_tama(void) {
     oled_nav_init(0);
     oled_nav_set_tama_enabled(true);
     oled_nav_event(OLED_EV_ACTIVITY, 3000);
-    TEST_ASSERT_EQ(oled_nav_active(32999), OLED_SCR_HOME, "avant 30s idle → HOME");
-    TEST_ASSERT_EQ(oled_nav_active(33000), OLED_SCR_TAMA, "30s idle → TAMA");
-    oled_nav_event(OLED_EV_ACTIVITY, 33000);
-    TEST_ASSERT_EQ(oled_nav_active(33001), OLED_SCR_HOME, "activité → retour HOME");
+    TEST_ASSERT_EQ(oled_nav_active(3000 + OLED_NAV_IDLE_MS - 1), OLED_SCR_HOME, "avant seuil idle → HOME");
+    TEST_ASSERT_EQ(oled_nav_active(3000 + OLED_NAV_IDLE_MS),     OLED_SCR_TAMA, "seuil idle → TAMA");
+    oled_nav_event(OLED_EV_ACTIVITY, 3000 + OLED_NAV_IDLE_MS);
+    TEST_ASSERT_EQ(oled_nav_active(3001 + OLED_NAV_IDLE_MS), OLED_SCR_HOME, "activité → retour HOME");
 }
 
 /* Pas d'idle→TAMA si tama désactivé. */

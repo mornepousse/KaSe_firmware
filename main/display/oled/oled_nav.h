@@ -12,7 +12,7 @@ typedef enum {
 } oled_nav_event_t;
 
 #define OLED_NAV_SPLASH_MS  2000u
-#define OLED_NAV_IDLE_MS    30000u
+#define OLED_NAV_IDLE_MS    15000u   /* inactivité avant écran TAMA (screensaver) */
 
 /* Réinitialise la machine à états. resting=HOME. N'ARME PAS le splash (c'est
    OLED_EV_BOOT qui l'arme, uniquement au vrai démarrage) → pas de splash au
