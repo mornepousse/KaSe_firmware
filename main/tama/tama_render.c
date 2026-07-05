@@ -29,9 +29,27 @@ static uint8_t bounce_dir = 0;     /* 0=down, 1=up */
 /* Canvas buffer for round display (true-color) */
 static lv_color_t canvas_buf[32 * 32];
 
-/* Mono image buffer for OLED (1-bit, avoids canvas artifacts) */
-static uint8_t mono_buf[4 + 32 * 4]; /* LVGL header (4 bytes) + 32 rows × 4 bytes */
+/* OLED : le sprite 32×32 est upscalé (nearest-neighbor, propre) à OLED_PET_N et
+ * centré horizontalement — pet « en grand » sur l'écran principal. */
+#define OLED_PET_N       46           /* 16 + 46 = 62, + bounce ≤ 2 → tient dans 64 */
+#define OLED_PET_STRIDE  6            /* (46 + 7) / 8 */
+#define OLED_PET_Y       16           /* sous la barre de statut 16px            */
+
+/* Mono image buffer for OLED (1-bit, avoids canvas artifacts) — taille upscalée. */
+static uint8_t mono_buf[OLED_PET_STRIDE * OLED_PET_N];
 static lv_img_dsc_t mono_img_dsc;
+
+/* Upscale nearest-neighbor 32×32 (128 B) → OLED_PET_N × OLED_PET_N dans mono_buf. */
+static void oled_upscale(const uint8_t *src)
+{
+    memset(mono_buf, 0, sizeof(mono_buf));
+    for (int y = 0; y < OLED_PET_N; y++)
+        for (int x = 0; x < OLED_PET_N; x++) {
+            int sx = x * 32 / OLED_PET_N, sy = y * 32 / OLED_PET_N;
+            if ((src[sy * 4 + sx / 8] >> (7 - (sx % 8))) & 1)
+                mono_buf[y * OLED_PET_STRIDE + x / 8] |= (1 << (7 - (x % 8)));
+        }
+}
 
 static uint16_t scr_w = 0, scr_h = 0;
 static uint8_t scale = 1; /* pixel upscale factor */
@@ -89,16 +107,16 @@ void tama_render_create(lv_obj_t *parent, uint16_t screen_w, uint16_t screen_h)
     } else {
         /* OLED mono: use lv_img with 1-bit buffer (no canvas artifacts) */
         mono_img_dsc.header.always_zero = 0;
-        mono_img_dsc.header.w = TAMA_SPRITE_W;
-        mono_img_dsc.header.h = TAMA_SPRITE_H;
+        mono_img_dsc.header.w = OLED_PET_N;
+        mono_img_dsc.header.h = OLED_PET_N;
         mono_img_dsc.header.cf = LV_IMG_CF_ALPHA_1BIT;
-        mono_img_dsc.data_size = TAMA_SPRITE_BYTES;
+        mono_img_dsc.data_size = sizeof(mono_buf);
         mono_img_dsc.data = mono_buf;
         memset(mono_buf, 0, sizeof(mono_buf));
 
         container = lv_img_create(parent);
         lv_img_set_src(container, &mono_img_dsc);
-        lv_obj_set_pos(container, 96, 20); /* centered in content zone, safe from status bar */
+        lv_obj_set_pos(container, (screen_w - OLED_PET_N) / 2, OLED_PET_Y); /* centré, sous la barre de statut */
     }
 
     /* Stat bars — below sprite (round) or left of sprite (OLED) */
@@ -213,10 +231,10 @@ void tama_render_update(tama2_state_t state, const tama2_stats_t *stats, uint8_t
         lv_obj_invalidate(canvas);
     } else if (container) {
         if (!lv_obj_is_valid(container)) { container = NULL; return; }
-        /* OLED: copy sprite bits to mono buffer */
-        memcpy(mono_buf, frame, TAMA_SPRITE_BYTES);
+        /* OLED : upscale la frame courante (nearest-neighbor) dans mono_buf. */
+        oled_upscale(frame);
         lv_img_set_src(container, &mono_img_dsc);
-        lv_obj_set_pos(container, 96, 20 + bounce_offset);
+        lv_obj_set_pos(container, (scr_w - OLED_PET_N) / 2, OLED_PET_Y + bounce_offset);
         lv_obj_invalidate(container);
     }
 
