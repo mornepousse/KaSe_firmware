@@ -1,0 +1,7 @@
+liblvgl.a
+obj/
+render_screens
+oled_sim
+out.png
+img_*.png
+stb_image_write.h
