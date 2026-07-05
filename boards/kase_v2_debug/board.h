@@ -31,11 +31,13 @@
  * different pad is more accessible on the bodge (nothing else depends on it). */
 #define BOARD_VBUS_SENSE_GPIO   GPIO_NUM_33
 
-/* OLED off after 5s idle (vs 60s on V2) — save the panel/battery in wireless use.
- * Decoupled from the RF light-sleep (60s, hard-coded in keyboard_task): screen
- * blanks fast, the system sleeps later. Wakes on the next keypress (<500ms). */
+/* OLED off after 30s idle (vs 60s on V2) — compromis batterie/panneau en wireless
+ * MAIS assez long pour laisser apparaître l'écran TAMA (screensaver à 10s idle,
+ * OLED_NAV_IDLE_MS) : doit rester > OLED_NAV_IDLE_MS sinon l'écran s'éteint avant.
+ * Découplé du RF light-sleep (60s, hard-codé keyboard_task). Réveil au prochain
+ * keypress (<500ms). Historique : était 5s, remonté pour voir le tama. */
 #undef BOARD_DISPLAY_SLEEP_MS
-#define BOARD_DISPLAY_SLEEP_MS  5000
+#define BOARD_DISPLAY_SLEEP_MS  30000
 
 /* Override product info */
 #undef GATTS_TAG
