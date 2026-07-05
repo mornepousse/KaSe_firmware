@@ -34,6 +34,12 @@ static uint32_t now_ms(void)
  * de tourner avant le premier refresh_all. */
 static bool oled_initialized = false;
 
+/* true dès le tout premier refresh_all (= vrai boot). Sert à n'armer le splash
+ * qu'au démarrage : le réveil passe aussi par refresh_all mais ne doit PAS
+ * re-déclencher le splash. Jamais remis à false (sleep touche oled_initialized,
+ * pas celui-ci). */
+static bool oled_booted = false;
+
 /* ── Backend interface ───────────────────────────────────────────── */
 
 static bool oled_init(void)
@@ -57,15 +63,18 @@ static bool oled_init(void)
     return display_available;
 }
 
-/* Full (re)build : table rase + reset du manager. oled_screens_reset() appelle
- * oled_nav_init() (qui arme le splash à now+SPLASH_MS → splash au boot), remet
- * le KPM à zéro et re-synchronise tama_enabled. Lock LVGL tenu (le manager y
- * touche des objets LVGL via destroy()). */
+/* Full (re)build : table rase + reset du manager. oled_screens_reset() remet le
+ * KPM à zéro et re-synchronise tama_enabled (mais N'ARME PLUS le splash). Le
+ * splash n'est armé qu'au tout premier appel (vrai boot), via oled_screens_boot() ;
+ * les refresh suivants (réveil, action BT…) n'affichent pas de splash. Lock LVGL
+ * tenu (le manager touche des objets LVGL via destroy()). */
 static void oled_refresh_all(void)
 {
     if (!display_available) return;
     if (!lvgl_port_lock(200)) return;
-    oled_screens_reset(now_ms());
+    uint32_t t = now_ms();
+    oled_screens_reset(t);
+    if (!oled_booted) { oled_screens_boot(t); oled_booted = true; }  /* splash au boot seul */
     display_clear_screen();
     oled_initialized = true;
     lvgl_port_unlock();
@@ -81,14 +90,14 @@ static void oled_update(void)
     lvgl_port_unlock();
 }
 
-/* Changement de couche : arme le flash LAYER puis force un tick pour que
- * l'écran LAYER apparaisse immédiatement. */
+/* Changement de couche : compte comme activité (pas de bascule d'écran — HOME
+ * affiche déjà la couche) puis force un tick pour rafraîchir HOME tout de suite. */
 static void oled_update_layer(void)
 {
     if (!display_available) return;
     if (!oled_initialized) { oled_refresh_all(); return; }
     oled_screens_layer_changed(now_ms());
-    oled_update();   /* rebâtit tout de suite l'écran actif (LAYER) */
+    oled_update();   /* rafraîchit HOME immédiatement avec la nouvelle couche */
 }
 
 static void oled_sleep(void)

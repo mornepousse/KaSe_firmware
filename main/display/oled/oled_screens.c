@@ -20,7 +20,6 @@
 /* ── Externs des 5 écrans (définis dans Tasks 8-12) ────────────────── */
 extern const oled_screen_t screen_splash;
 extern const oled_screen_t screen_home;
-extern const oled_screen_t screen_layer;
 extern const oled_screen_t screen_stats;
 extern const oled_screen_t screen_tama;
 
@@ -28,7 +27,6 @@ extern const oled_screen_t screen_tama;
 static const oled_screen_t *s_screens[OLED_SCR_COUNT] = {
     [OLED_SCR_SPLASH] = &screen_splash,
     [OLED_SCR_HOME]   = &screen_home,
-    [OLED_SCR_LAYER]  = &screen_layer,
     [OLED_SCR_STATS]  = &screen_stats,
     [OLED_SCR_TAMA]   = &screen_tama,
 };
@@ -88,6 +86,7 @@ void oled_screens_tick(uint32_t now_ms)
     s_screens[s_current]->update();
 }
 
+void oled_screens_boot(uint32_t now_ms)          { oled_nav_event(OLED_EV_BOOT,          now_ms); }
 void oled_screens_layer_changed(uint32_t now_ms) { oled_nav_event(OLED_EV_LAYER_CHANGED, now_ms); }
 void oled_screens_disp_key(uint32_t now_ms)      { oled_nav_event(OLED_EV_DISP_KEY,     now_ms); }
 void oled_screens_activity(uint32_t now_ms)      { oled_nav_event(OLED_EV_ACTIVITY,      now_ms); }

@@ -20,6 +20,8 @@ void oled_screens_reset(uint32_t now_ms);
 void oled_screens_tick(uint32_t now_ms);
 
 /* Événements de navigation (forwarded à oled_nav_event). */
+/* Arme le splash de boot (à appeler UNE fois, au vrai démarrage). */
+void oled_screens_boot(uint32_t now_ms);
 void oled_screens_layer_changed(uint32_t now_ms);
 void oled_screens_disp_key(uint32_t now_ms);
 void oled_screens_activity(uint32_t now_ms);

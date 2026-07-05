@@ -66,7 +66,6 @@ if(CONFIG_KASE_HAS_DISPLAY)
             "display/oled/oled_screens.c"
             "display/oled/screens/screen_splash.c"
             "display/oled/screens/screen_home.c"
-            "display/oled/screens/screen_layer.c"
             "display/oled/screens/screen_stats.c"
             "display/oled/screens/screen_tama.c"
         )

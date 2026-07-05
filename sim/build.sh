@@ -7,7 +7,7 @@ gcc -O1 -w -Isim/stubs -Isim -Imain/display/oled -Imain/display/oled/screens -Im
   sim/oled_sim.c sim/render_screens.c sim/sim_stubs.c \
   main/display/oled/oled_kpm.c main/display/oled/oled_stats.c \
   main/display/oled/screens/screen_splash.c main/display/oled/screens/screen_home.c \
-  main/display/oled/screens/screen_layer.c main/display/oled/screens/screen_stats.c \
+  main/display/oled/screens/screen_stats.c \
   main/display/oled/screens/screen_tama.c main/display/assets/img_usb.c main/display/assets/img_signal.c main/display/assets/img_bluetooth.c \
   sim/liblvgl.a -lm -o sim/render_screens
 ./sim/render_screens
