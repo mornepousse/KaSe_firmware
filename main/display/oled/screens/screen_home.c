@@ -1,16 +1,18 @@
-/* screen_home.c — HOME : tableau de bord DENSE (tout visible d'un coup).
+/* screen_home.c — HOME : tableau de bord DENSE avec le pet tama.
  *
  * Layout 128×64 SSD1306 mono (lv_color_black() = pixel allumé), font_14 texte :
  *
- *   y=0..15  : [path 16×16][bt 16×16] slot ................... CAP
- *   y=16     : séparateur (ligne)
- *   y=18..32 : nom de couche (gauche, tronqué …)  ......... "L5" (droite)
- *   y=34..48 : "520kpm  104wpm"
- *   y=50..55 : barre faim tama    (si tama activé, pleine largeur)
- *   y=57..62 : barre bonheur tama (si tama activé)
+ *   y=0..15  : [path 16][bt 16] slot ........................ CAP
+ *   y=16     : séparateur
+ *   COLONNE GAUCHE (x=2..90, le sprite occupe x=96..128) :
+ *     y=18..32 : nom de couche (tronqué …)
+ *     y=34..48 : "142kpm"
+ *     y=50..55 : barre faim tama
+ *     y=57..62 : barre bonheur tama
+ *   SPRITE tama : x=96..128, y=20..52 (tama_render, si tama activé)
  *
- * Icônes = vrais assets 16×16 (flash/USB, wifi/signal, bluetooth). Noms longs
- * tronqués (LONG_DOT + largeur bornée). Rien ne dépasse des 64 px.
+ * Le pet est sur l'écran PRINCIPAL (demande utilisateur). Tout en font_14,
+ * colonne gauche bornée à x<90 pour ne pas chevaucher le sprite.
  */
 #include "oled_screen.h"
 #include "lvgl.h"
@@ -22,22 +24,22 @@
 #include "hid_report.h"
 #include "usb_hid.h"
 #include "oled_kpm.h"
-#include "oled_stats.h"
 #include "tama_engine.h"
+#include "tama_render.h"
 #if CONFIG_KASE_KBD_WIRELESS
 #include "usb_presence.h"
 #endif
 
-#define SH_STATUS_H     16   /* icônes 16×16 → barre de 16px, séparateur dessous */
+#define SH_STATUS_H     16
 #define SH_ICON_PATH_X   0
-#define SH_ICON_BT_X    18   /* 0 + 16 + 2 gap : pas de chevauchement d'icônes    */
+#define SH_ICON_BT_X    18
 #define SH_BT_SLOT_X    36
 #define SH_LAYER_X       2
 #define SH_LAYER_Y      18
-#define SH_LAYER_W      88   /* largeur bornée → noms longs tronqués (…)         */
-#define SH_SUB_Y        34
+#define SH_LAYER_W      88   /* < sprite (x=96) → pas de chevauchement, tronqué … */
+#define SH_KPM_Y        34
 #define SH_BAR_X         2
-#define SH_BAR_W       (BOARD_DISPLAY_WIDTH - SH_BAR_X - 2)
+#define SH_BAR_W        88   /* colonne gauche, s'arrête avant le sprite (x=96)   */
 #define SH_BAR_H         5
 #define SH_HUNGER_Y     50
 #define SH_HAPPY_Y      57
@@ -48,18 +50,17 @@ static lv_obj_t *s_icon_bt     = NULL;
 static lv_obj_t *s_bt_slot     = NULL;
 static lv_obj_t *s_caps        = NULL;
 static lv_obj_t *s_layer_label = NULL;
-static lv_obj_t *s_sub_label   = NULL;
 static lv_obj_t *s_kpm_label   = NULL;
-static lv_obj_t *s_wpm_label   = NULL;
 static lv_obj_t *s_hunger_bar  = NULL;
 static lv_obj_t *s_happy_bar   = NULL;
+static bool      s_has_pet     = false;
 
-static lv_obj_t *make_bar(lv_obj_t *parent, int x, int y, int w, int h, int max)
+static lv_obj_t *make_bar(lv_obj_t *parent, int y)
 {
     lv_obj_t *b = lv_bar_create(parent);
-    lv_obj_set_size(b, w, h);
-    lv_obj_set_pos(b, x, y);
-    lv_bar_set_range(b, 0, max);
+    lv_obj_set_size(b, SH_BAR_W, SH_BAR_H);
+    lv_obj_set_pos(b, SH_BAR_X, y);
+    lv_bar_set_range(b, 0, TAMA2_STAT_MAX);
     lv_bar_set_value(b, 0, LV_ANIM_OFF);
     lv_obj_set_style_bg_opa(b, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_border_width(b, 1, LV_PART_MAIN);
@@ -83,7 +84,7 @@ static lv_obj_t *make_lbl(lv_obj_t *parent, int x, int y)
 
 static void build(lv_obj_t *parent)
 {
-    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);   /* pas de scrollbar */
+    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
 
     s_sep = lv_obj_create(parent);
     lv_obj_set_size(s_sep, BOARD_DISPLAY_WIDTH, 1);
@@ -112,13 +113,14 @@ static void build(lv_obj_t *parent)
     lv_obj_set_width(s_layer_label, SH_LAYER_W);
     lv_obj_set_pos(s_layer_label, SH_LAYER_X, SH_LAYER_Y);
 
-    s_sub_label = make_lbl(parent, 0, SH_LAYER_Y);   /* "L5" aligné à droite, ligne 1 */
-    s_kpm_label = make_lbl(parent, SH_LAYER_X, SH_SUB_Y);  /* "NNN KPM  MMM WPM" ligne 2 */
-    s_wpm_label = NULL;
+    s_kpm_label = make_lbl(parent, SH_LAYER_X, SH_KPM_Y);
 
-    if (tama_engine_is_enabled()) {
-        s_hunger_bar = make_bar(parent, SH_BAR_X, SH_HUNGER_Y, SH_BAR_W, SH_BAR_H, TAMA2_STAT_MAX);
-        s_happy_bar  = make_bar(parent, SH_BAR_X, SH_HAPPY_Y,  SH_BAR_W, SH_BAR_H, TAMA2_STAT_MAX);
+    /* Pet sur l'écran principal (sprite à droite) + barres tama à gauche. */
+    s_has_pet = tama_engine_is_enabled();
+    if (s_has_pet) {
+        tama_render_create(parent, BOARD_DISPLAY_WIDTH, BOARD_DISPLAY_HEIGHT);
+        s_hunger_bar = make_bar(parent, SH_HUNGER_Y);
+        s_happy_bar  = make_bar(parent, SH_HAPPY_Y);
     }
 }
 
@@ -148,27 +150,24 @@ static void update(void)
     }
 
     if (s_layer_label) lv_label_set_text(s_layer_label, default_layout_names[current_layout]);
-    if (s_sub_label) {
-        lv_label_set_text_fmt(s_sub_label, "L%d", (int)current_layout);
-        lv_obj_align(s_sub_label, LV_ALIGN_TOP_RIGHT, -1, SH_LAYER_Y);   /* re-cale à droite */
-    }
+    if (s_kpm_label)   lv_label_set_text_fmt(s_kpm_label, "%lukpm", (unsigned long)oled_kpm_value());
 
-    uint32_t kpm = oled_kpm_value();
-    if (s_kpm_label) lv_label_set_text_fmt(s_kpm_label, "%lukpm  %luwpm",
-                                           (unsigned long)kpm, (unsigned long)oled_wpm_from_kpm(kpm));
-
-    const tama2_stats_t *st = (s_hunger_bar || s_happy_bar) ? tama_engine_get_stats() : NULL;
-    if (st) {
-        if (s_hunger_bar) lv_bar_set_value(s_hunger_bar, st->hunger, LV_ANIM_OFF);
-        if (s_happy_bar)  lv_bar_set_value(s_happy_bar,  st->happiness, LV_ANIM_OFF);
+    if (s_has_pet) {
+        const tama2_stats_t *st = tama_engine_get_stats();
+        tama_render_update(tama_engine_get_state(), st, tama_engine_get_critter());
+        if (st) {
+            if (s_hunger_bar) lv_bar_set_value(s_hunger_bar, st->hunger, LV_ANIM_OFF);
+            if (s_happy_bar)  lv_bar_set_value(s_happy_bar,  st->happiness, LV_ANIM_OFF);
+        }
     }
 }
 
 static void destroy(void)
 {
+    if (s_has_pet) { tama_render_destroy(); s_has_pet = false; }
 #define DEL(p) do { if (p && lv_obj_is_valid(p)) lv_obj_del(p); p = NULL; } while (0)
     DEL(s_happy_bar); DEL(s_hunger_bar);
-    DEL(s_wpm_label); DEL(s_kpm_label); DEL(s_sub_label); DEL(s_layer_label);
+    DEL(s_kpm_label); DEL(s_layer_label);
     DEL(s_caps); DEL(s_bt_slot); DEL(s_icon_bt); DEL(s_icon_path); DEL(s_sep);
 #undef DEL
 }
