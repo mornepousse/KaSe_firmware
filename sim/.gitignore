@@ -4,6 +4,7 @@ render_screens
 render_sprites
 gen_critters
 gen_sprite
+mockups
 oled_sim
 *.png
 stb_image_write.h
