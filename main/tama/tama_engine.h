@@ -68,6 +68,10 @@ void tama_engine_set_enabled(bool enabled);
 /* Save stats to NVS (call periodically) */
 void tama_engine_save(void);
 
+/* Renvoie true (et remet à false) si un événement à persister sans délai s'est
+   produit depuis le dernier appel (ex. level-up). main.c sauve immédiatement. */
+bool tama_engine_take_save_pending(void);
+
 /* Notify engine of session start/end */
 void tama_engine_session_start(void);
 void tama_engine_session_end(void);

@@ -13,6 +13,9 @@ static const char *TAG = "TAMA";
 static tama2_stats_t stats;
 static tama2_state_t state = TAMA2_IDLE;
 static bool enabled = true;
+/* Posé au level-up (milestone à persister sans attendre le save périodique) ;
+   consommé par tama_engine_take_save_pending() → main.c sauve immédiatement. */
+static bool s_save_pending = false;
 
 /* Keys between stat decay ticks */
 #define HUNGER_DECAY_KEYS    500   /* lose 10 hunger every 500 keys */
@@ -74,6 +77,7 @@ static void check_level_up(void)
     while (stats.xp >= needed && stats.level < MAX_LEVEL) {
         stats.xp -= needed;
         stats.level++;
+        s_save_pending = true;   /* milestone → persister sans attendre le save 60s */
         state = TAMA2_CELEBRATING;
         ESP_LOGI(TAG, "Level up! Now level %d (next: %d XP)", stats.level, xp_for_level(stats.level));
         needed = xp_for_level(stats.level);
@@ -220,6 +224,13 @@ void tama_engine_save(void)
     if (err != ESP_OK)
         ESP_LOGE(TAG, "Failed to save tama stats: %s", esp_err_to_name(err));
 #endif
+}
+
+bool tama_engine_take_save_pending(void)
+{
+    bool p = s_save_pending;
+    s_save_pending = false;
+    return p;
 }
 
 void tama_engine_session_start(void)

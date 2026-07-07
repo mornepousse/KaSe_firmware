@@ -308,6 +308,23 @@ static void test_tama_critter_matches_level(void)
     }
 }
 
+/* Un level-up doit poser le flag "save pending" (persistance immédiate du
+   milestone, sinon un unplug avant le save périodique 60s perd le niveau). */
+static void test_tama_levelup_sets_save_pending(void)
+{
+    reset_tama();
+    (void)tama_engine_take_save_pending();               /* purge un éventuel flag résiduel */
+    tama_engine_test_set_stats(800, 800, 800, 0, 450);   /* xp=450, seuil lvl0→1 = 500 */
+    for (int i = 0; i < 1000; i++)
+        tama_engine_keypress(0);                         /* 1000 frappes → +50 xp → 500 → level-up */
+    const tama2_stats_t *s = tama_engine_get_stats();
+    TEST_ASSERT_EQ(s->level, 1, "xp 450 + 50 → seuil 500 → level 1");
+    TEST_ASSERT(tama_engine_take_save_pending(),
+                "level-up → save pending (persistance immédiate)");
+    TEST_ASSERT(!tama_engine_take_save_pending(),
+                "take consomme le flag (2e lecture = false)");
+}
+
 /* ── Suite runner ───────────────────────────────────────────────────── */
 
 void test_tama_engine(void)
@@ -332,6 +349,7 @@ void test_tama_engine(void)
     TEST_RUN(test_tama_sleep_action);
     TEST_RUN(test_tama_xp_scaling_per_level);
     TEST_RUN(test_tama_levelup_multilevel);
+    TEST_RUN(test_tama_levelup_sets_save_pending);
     TEST_RUN(test_tama_max_level_cap);
     TEST_RUN(test_tama_critter_clamp_at_max);
     TEST_RUN(test_tama_critter_at_max_level);

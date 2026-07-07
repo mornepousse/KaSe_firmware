@@ -124,18 +124,22 @@ static void status_display_task(void *arg) {
       }
     }
 
-    /* Save tama every 60s if changed */
+    /* Persistance tama : immédiate sur un milestone (level-up, via le flag), sinon
+     * périodique toutes les 30s si les frappes ont changé. Un unplug abrupt perd
+     * au pire ~30s d'XP, jamais un level-up. */
     {
       static uint32_t last_tama_save = 0;
       static uint32_t last_tama_keys = 0;
       const tama2_stats_t *ts = tama_engine_get_stats();
-      if (ts && ts->total_keys != last_tama_keys) {
-        uint32_t now = esp_timer_get_time() / 1000;
-        if (now - last_tama_save > 60000) {
-          tama_engine_save();
-          last_tama_save = now;
-          last_tama_keys = ts->total_keys;
-        }
+      uint32_t now = esp_timer_get_time() / 1000;
+      if (tama_engine_take_save_pending()) {
+        tama_engine_save();
+        last_tama_save = now;
+        last_tama_keys = ts ? ts->total_keys : 0;
+      } else if (ts && ts->total_keys != last_tama_keys && now - last_tama_save > 30000) {
+        tama_engine_save();
+        last_tama_save = now;
+        last_tama_keys = ts->total_keys;
       }
     }
 
