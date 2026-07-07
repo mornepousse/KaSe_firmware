@@ -23,7 +23,6 @@ extern void oled_sim_write_png(const char *path);
 extern const oled_screen_t screen_splash;
 extern const oled_screen_t screen_home;
 extern const oled_screen_t screen_stats;
-extern const oled_screen_t screen_tama;
 
 static void render(const oled_screen_t *s, const char *path)
 {
@@ -44,7 +43,6 @@ int main(void)
     render(&screen_splash, "sim/img_splash.png");
     render(&screen_home,   "sim/img_home.png");
     render(&screen_stats,  "sim/img_stats.png");
-    render(&screen_tama,   "sim/img_tama.png");
     printf("done\n");
     return 0;
 }

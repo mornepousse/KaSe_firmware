@@ -19,7 +19,6 @@ extern void test_tap_hold(void);
 extern void test_tap_dance(void);
 extern void test_combo(void);
 extern void test_leader(void);
-extern void test_tama_engine(void);
 extern void test_rf_packet(void);
 extern void test_heartbeat(void);
 extern void test_half_matrix_diff(void);
@@ -68,7 +67,6 @@ int main(void) {
     test_tap_dance();
     test_combo();
     test_leader();
-    test_tama_engine();
     test_rf_packet();
     test_heartbeat();
     test_half_matrix_diff();

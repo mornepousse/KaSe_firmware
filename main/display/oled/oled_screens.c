@@ -13,22 +13,19 @@
 #include "oled_nav.h"
 #include "oled_kpm.h"
 #include "screens/oled_screen.h"
-#include "tama_engine.h"
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 
-/* ── Externs des 5 écrans (définis dans Tasks 8-12) ────────────────── */
+/* ── Externs des écrans ──────────────────────────────────────────────── */
 extern const oled_screen_t screen_splash;
 extern const oled_screen_t screen_home;
 extern const oled_screen_t screen_stats;
-extern const oled_screen_t screen_tama;
 
 /* ── Registre statique ──────────────────────────────────────────────── */
 static const oled_screen_t *s_screens[OLED_SCR_COUNT] = {
     [OLED_SCR_SPLASH] = &screen_splash,
     [OLED_SCR_HOME]   = &screen_home,
     [OLED_SCR_STATS]  = &screen_stats,
-    [OLED_SCR_TAMA]   = &screen_tama,
 };
 
 static oled_screen_id_t s_current = OLED_SCR_COUNT; /* aucun écran construit */
@@ -60,7 +57,6 @@ void oled_screens_reset(uint32_t now_ms)
 
     oled_kpm_reset();
     oled_nav_init(now_ms);
-    oled_nav_set_tama_enabled(tama_engine_is_enabled());
 }
 
 void oled_screens_tick(uint32_t now_ms)

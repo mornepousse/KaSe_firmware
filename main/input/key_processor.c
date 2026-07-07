@@ -21,7 +21,6 @@
 #include "combo.h"
 #include "leader.h"
 #include "key_features.h"
-#include "tama_engine.h"
 #include "sec_confirm.h"
 #include "esp_log.h"
 
@@ -244,10 +243,8 @@ static uint8_t process_advanced_key(uint16_t kc, uint8_t row, uint8_t col)
     if (kc == K_SEC_CONFIRM) { if (is_new_press(row, col)) sec_confirm_authorize(); return 0; }
     if (kc == K_LAYER_LOCK){ layer_lock_toggle(); return 0; }
     if (kc == K_DISP_NEXT) { if (is_new_press(row, col)) km_post_display_next(); return 0; }
-    if (kc == K_TAMA_FEED)     { if (is_new_press(row, col)) tama_engine_action(TAMA2_ACTION_FEED); return 0; }
-    if (kc == K_TAMA_PLAY)     { if (is_new_press(row, col)) tama_engine_action(TAMA2_ACTION_PLAY); return 0; }
-    if (kc == K_TAMA_SLEEP)    { if (is_new_press(row, col)) tama_engine_action(TAMA2_ACTION_SLEEP); return 0; }
-    if (kc == K_TAMA_MEDICINE) { if (is_new_press(row, col)) tama_engine_action(TAMA2_ACTION_MEDICINE); return 0; }
+    /* K_TAMA_* (0x3500-0x3800) : keycodes conservés (partagés KaSe_soft) mais
+     * sans effet — le tamagotchi a été retiré. Ils tombent sur le return 0. */
     return 0;
 }
 

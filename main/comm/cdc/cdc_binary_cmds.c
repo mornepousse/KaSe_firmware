@@ -11,7 +11,6 @@
 #include "tap_dance.h"
 #include "combo.h"
 #include "leader.h"
-#include "tama_engine.h"
 #include "key_features.h"
 #include "hid_bluetooth_manager.h"
 #include "status_display.h"
@@ -314,45 +313,23 @@ static void bin_cmd_bt_prev(uint8_t cmd, const uint8_t *p, uint16_t l)
 
 /* ── Tamagotchi ─────────────────────────────────────────────────── */
 
-/* TAMA_QUERY: → packed stats */
+/* TAMA retiré — commandes conservées pour la compat protocole (controller
+ * KaSe_soft partage les IDs) mais SANS effet. QUERY renvoie "désactivé" + des
+ * stats à zéro (même taille de payload qu'avant : 22 octets). */
 static void bin_cmd_tama_query(uint8_t cmd, const uint8_t *p, uint16_t l)
 {
     (void)p; (void)l;
-    const tama2_stats_t *s = tama_engine_get_stats();
-    uint8_t buf[24];
-    buf[0] = tama_engine_is_enabled() ? 1 : 0;
-    buf[1] = (uint8_t)tama_engine_get_state();
-    pack_u16_le(buf + 2, s->hunger);
-    pack_u16_le(buf + 4, s->happiness);
-    pack_u16_le(buf + 6, s->energy);
-    pack_u16_le(buf + 8, s->health);
-    pack_u16_le(buf + 10, s->level);
-    pack_u16_le(buf + 12, s->xp);
-    pack_u32_le(buf + 14, s->total_keys);
-    pack_u32_le(buf + 18, s->max_kpm);
-    ks_respond(cmd, KS_STATUS_OK, buf, 22);
+    uint8_t buf[22] = {0};   /* enabled=0, state=0, toutes stats à 0 */
+    ks_respond(cmd, KS_STATUS_OK, buf, sizeof(buf));
 }
 
-static void bin_cmd_tama_enable(uint8_t cmd, const uint8_t *p, uint16_t l)
-{ (void)p; (void)l; tama_engine_set_enabled(true); ks_respond_ok(cmd); }
-
-static void bin_cmd_tama_disable(uint8_t cmd, const uint8_t *p, uint16_t l)
-{ (void)p; (void)l; tama_engine_set_enabled(false); ks_respond_ok(cmd); }
-
-static void bin_cmd_tama_feed(uint8_t cmd, const uint8_t *p, uint16_t l)
-{ (void)p; (void)l; tama_engine_action(TAMA2_ACTION_FEED); ks_respond_ok(cmd); }
-
-static void bin_cmd_tama_play(uint8_t cmd, const uint8_t *p, uint16_t l)
-{ (void)p; (void)l; tama_engine_action(TAMA2_ACTION_PLAY); ks_respond_ok(cmd); }
-
-static void bin_cmd_tama_sleep(uint8_t cmd, const uint8_t *p, uint16_t l)
-{ (void)p; (void)l; tama_engine_action(TAMA2_ACTION_SLEEP); ks_respond_ok(cmd); }
-
-static void bin_cmd_tama_medicine(uint8_t cmd, const uint8_t *p, uint16_t l)
-{ (void)p; (void)l; tama_engine_action(TAMA2_ACTION_MEDICINE); ks_respond_ok(cmd); }
-
-static void bin_cmd_tama_save(uint8_t cmd, const uint8_t *p, uint16_t l)
-{ (void)p; (void)l; tama_engine_save(); ks_respond_ok(cmd); }
+static void bin_cmd_tama_enable(uint8_t cmd, const uint8_t *p, uint16_t l)   { (void)p; (void)l; ks_respond_ok(cmd); }
+static void bin_cmd_tama_disable(uint8_t cmd, const uint8_t *p, uint16_t l)  { (void)p; (void)l; ks_respond_ok(cmd); }
+static void bin_cmd_tama_feed(uint8_t cmd, const uint8_t *p, uint16_t l)     { (void)p; (void)l; ks_respond_ok(cmd); }
+static void bin_cmd_tama_play(uint8_t cmd, const uint8_t *p, uint16_t l)     { (void)p; (void)l; ks_respond_ok(cmd); }
+static void bin_cmd_tama_sleep(uint8_t cmd, const uint8_t *p, uint16_t l)    { (void)p; (void)l; ks_respond_ok(cmd); }
+static void bin_cmd_tama_medicine(uint8_t cmd, const uint8_t *p, uint16_t l) { (void)p; (void)l; ks_respond_ok(cmd); }
+static void bin_cmd_tama_save(uint8_t cmd, const uint8_t *p, uint16_t l)     { (void)p; (void)l; ks_respond_ok(cmd); }
 
 /* ── Features ───────────────────────────────────────────────────── */
 

@@ -8,9 +8,6 @@
 #include "usb_presence.h"
 #include "key_stats.h"
 #include "esp_app_desc.h"
-#include "tama_engine.h"
-#include "tama_render.h"
-#include "tama_sprites.h"   /* vrais sprites (main/tama) pour un rendu fidèle */
 
 /* ── Données ─────────────────────────────────────────────────────── */
 uint8_t current_layout = 5;  /* GAMING (nom long, test débordement) */
@@ -32,47 +29,7 @@ kbd_route_t kbd_active_route(void)      { return KBD_OUT_USB; }
 static const esp_app_desc_t s_desc = { .version = "v4.0.0" };
 const esp_app_desc_t *esp_app_get_description(void) { return &s_desc; }
 
-/* ── Tama : stats + renderer placeholder (boîte "pet") ───────────── */
-static const tama2_stats_t s_stats = {
-    .hunger = 620, .happiness = 800, .energy = 500, .health = 640,
-    .total_keys = 1234567, .session_keys = 4200, .max_kpm = 380,
-    .level = 3, .xp = 42,
-};
-tama2_state_t tama_engine_get_state(void)      { return TAMA2_STATE_IDLE; }
-const tama2_stats_t *tama_engine_get_stats(void) { return &s_stats; }
-uint8_t tama_engine_get_critter(void)          { return 0; }
-bool tama_engine_is_enabled(void)              { return true; }
-
-/* Miroir de tama_render.c OLED : upscale nearest-neighbor 32→46, centré à y=16
- * (gros pet). Critter de démo = index 8. */
-#define SIM_PET_N       46
-#define SIM_PET_STRIDE  6
-static lv_obj_t   *s_pet = NULL;
-static lv_img_dsc_t s_pet_dsc;
-static uint8_t     s_pet_buf[SIM_PET_STRIDE * SIM_PET_N];
-void tama_render_create(lv_obj_t *parent, uint16_t w, uint16_t h)
-{
-    (void)w; (void)h;
-    const uint8_t *src = tama_critters[8].main_frame;
-    memset(s_pet_buf, 0, sizeof(s_pet_buf));
-    for (int y = 0; y < SIM_PET_N; y++)
-        for (int x = 0; x < SIM_PET_N; x++) {
-            int sx = x * 32 / SIM_PET_N, sy = y * 32 / SIM_PET_N;
-            if ((src[sy * 4 + sx / 8] >> (7 - (sx % 8))) & 1)
-                s_pet_buf[y * SIM_PET_STRIDE + x / 8] |= (1 << (7 - (x % 8)));
-        }
-    s_pet_dsc.header.always_zero = 0;
-    s_pet_dsc.header.cf = LV_IMG_CF_ALPHA_1BIT;
-    s_pet_dsc.header.w = SIM_PET_N;
-    s_pet_dsc.header.h = SIM_PET_N;
-    s_pet_dsc.data_size = sizeof(s_pet_buf);
-    s_pet_dsc.data = s_pet_buf;
-    s_pet = lv_img_create(parent);
-    lv_img_set_src(s_pet, &s_pet_dsc);
-    lv_obj_set_pos(s_pet, (128 - SIM_PET_N) / 2, 16);
-}
-void tama_render_update(tama2_state_t s, const tama2_stats_t *st, uint8_t c) { (void)s;(void)st;(void)c; }
-void tama_render_destroy(void) { if (s_pet) { lv_obj_del(s_pet); s_pet = NULL; } }
+/* (Tamagotchi retiré — plus de stubs tama.) */
 
 /* Icônes : on linke les VRAIS assets (main/display/assets/img_*.c, 16×16
  * ALPHA_1BIT) — pas de placeholder, pour voir la vraie taille/position. */

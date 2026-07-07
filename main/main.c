@@ -26,7 +26,6 @@
 #include "led_strip_anim.h"
 #include "matrix_scan.h"
 #include "status_display.h"
-#include "tama_engine.h"
 #endif
 
 #if CONFIG_KASE_KBD_WIRELESS
@@ -124,24 +123,6 @@ static void status_display_task(void *arg) {
       }
     }
 
-    /* Persistance tama : immédiate sur un milestone (level-up, via le flag), sinon
-     * périodique toutes les 30s si les frappes ont changé. Un unplug abrupt perd
-     * au pire ~30s d'XP, jamais un level-up. */
-    {
-      static uint32_t last_tama_save = 0;
-      static uint32_t last_tama_keys = 0;
-      const tama2_stats_t *ts = tama_engine_get_stats();
-      uint32_t now = esp_timer_get_time() / 1000;
-      if (tama_engine_take_save_pending()) {
-        tama_engine_save();
-        last_tama_save = now;
-        last_tama_keys = ts ? ts->total_keys : 0;
-      } else if (ts && ts->total_keys != last_tama_keys && now - last_tama_save > 30000) {
-        tama_engine_save();
-        last_tama_save = now;
-        last_tama_keys = ts->total_keys;
-      }
-    }
 
     vTaskDelay(pdMS_TO_TICKS(
         100)); // 100ms polling — fast enough for UI, no keyboard lag
@@ -237,9 +218,7 @@ void app_main(void) {
     leader_load();
     key_override_load();
 #if CONFIG_KASE_DEVICE_ROLE_KEYBOARD
-    extern void tama_engine_init(void);
     bt_devices_load();
-    tama_engine_init();
 #endif
   } else {
     ESP_LOGW(TAG, "Safe mode: skipping NVS config loading");

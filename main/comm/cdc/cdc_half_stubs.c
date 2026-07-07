@@ -53,20 +53,6 @@ void status_display_update_layer_name(void) { /* no display on half */ }
  * Provide an empty JSON array. */
 const char board_layout_json[] = "[]";
 
-/* ── Tamagotchi ─────────────────────────────────────────────── *
- * Forward-declare tama types as opaque. The handlers that use them
- * always check NULL or treat as enum. */
-typedef int tama2_action_t;
-typedef int tama2_state_t;
-typedef struct tama2_stats_s tama2_stats_t;
-
-void tama_engine_save(void) { }
-void tama_engine_action(tama2_action_t action) { (void)action; }
-tama2_state_t tama_engine_get_state(void) { return 0; }
-const tama2_stats_t *tama_engine_get_stats(void) { return NULL; }
-bool tama_engine_is_enabled(void) { return false; }
-void tama_engine_set_enabled(bool enabled) { (void)enabled; }
-
 /* ── Bluetooth slot management ─────────────────────────────── */
 typedef struct bt_device_slot_s bt_device_slot_t;
 

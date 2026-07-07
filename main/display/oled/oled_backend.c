@@ -16,7 +16,6 @@
 #include "oled_nav.h"
 #include "oled_screens.h"
 #include "oled_kpm.h"
-#include "tama_engine.h"
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 #include "freertos/FreeRTOS.h"
@@ -132,8 +131,6 @@ static void oled_notify_mouse(void)
 static void oled_notify_keypress(void)
 {
     oled_kpm_notify_keypress();
-    if (tama_engine_is_enabled())
-        tama_engine_keypress(oled_kpm_value());
     oled_screens_activity(now_ms());
 }
 

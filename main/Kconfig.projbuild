@@ -46,13 +46,6 @@ config KASE_HAS_BLE
         M.2 dongle over USB, so its own BLE radio is redundant — and dropping it
         frees ~80KB heap and removes its 2.4GHz activity near the NRF relay.
 
-config KASE_HAS_TAMA
-    bool
-    default y if KASE_DEVICE_ROLE_KEYBOARD
-    default n
-    help
-        Compiles Tamagotchi virtual pet.
-
 config KASE_KBD_WIRELESS
     bool "Keyboard talks to the M.2 dongle wirelessly (NRF HID + ESP-NOW config)"
     default n

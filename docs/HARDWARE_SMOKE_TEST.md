@@ -20,19 +20,17 @@ dans la PR/release.
 - [ ] OLED SSD1306 affiche sans artefact
 - [ ] V2D : COLS7/8 (GPIO21/4) scannent correctement
 
-## OLED refonte multi-écrans (V2 / V2D)
+## OLED refonte multi-écrans (V2 / V2D) — tamagotchi retiré
 - [ ] Boot : splash « KaSe » + version ~2s, puis HOME
 - [ ] Splash UNIQUEMENT au boot : éteindre/rallumer l'écran (veille→réveil) → PAS de splash, retour direct sur HOME
-- [ ] HOME (dashboard dense) : connexion (USB/BLE/RF + slot) + caps ; nom de couche ; KPM ; barres tama faim/joie ; **sprite du pet à droite**
-- [ ] Changement de couche → HOME met à jour son champ couche (PLUS d'écran LAYER plein écran)
-- [ ] Rien ne déborde / ne se chevauche sur aucun écran (texte, sprite, barres)
-- [ ] Sprites tama = style rempli (pas de contour), lisibles ; le pet respire/cligne
-- [ ] Touche K_DISP_NEXT (0x3F00, à mapper) : cycle HOME → STATS → TAMA → HOME
+- [ ] HOME : barre de statut (connexion USB/BLE/RF + slot + CAP) ; **nom de couche en grand** (font_28) + « layer N » dessous
+- [ ] Changement de couche → HOME met à jour le nom (PLUS d'écran LAYER plein écran)
+- [ ] Rien ne déborde / ne se chevauche (nom de couche long → tronqué …)
+- [ ] Touche K_DISP_NEXT (0x3F00, à mapper) : cycle HOME → STATS → HOME
 - [ ] STATS : KPM/WPM bougent en tapant, sparkline se remplit, total croît
-- [ ] Idle ~10s (tama activé) → écran TAMA (sprite + barres + niveau, sans chevauchement) ; 1ʳᵉ frappe → retour HOME
-- [ ] V2D : écran s'éteint à ~30s d'inactivité (> 10s → le TAMA a le temps de s'afficher) ; réveil à la 1ʳᵉ frappe
-- [ ] Idle avec tama désactivé → reste sur HOME (pas de TAMA), pas de barres/sprite tama sur HOME
-- [ ] Pas de scintillement / rebuild en boucle ; pas de reliquat (sprite tama) par-dessus l'écran suivant
+- [ ] V2D : écran s'éteint à ~30s d'inactivité ; réveil à la 1ʳᵉ frappe
+- [ ] Plus AUCun tama : pas de pet, pas d'écran TAMA, pas de barres faim/joie nulle part (V1 round inclus)
+- [ ] Pas de scintillement / rebuild en boucle entre HOME et STATS
 - [ ] Presser une touche BT (switch/pair) pendant que HOME s'affiche → pas de crash, l'écran se reconstruit
 
 ## Dongle

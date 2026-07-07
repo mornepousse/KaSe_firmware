@@ -27,8 +27,6 @@ add_executable(test_runner
     ../main/input/combo.c
     test_leader.c
     ../main/input/leader.c
-    test_tama_engine.c
-    ../main/tama/tama_engine.c
     test_rf_packet.c
     test_heartbeat.c
     ../main/comm/rf/heartbeat.c
@@ -95,7 +93,6 @@ target_include_directories(test_runner PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/comm/espnow
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/input
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/comm/ble
-    ${CMAKE_CURRENT_SOURCE_DIR}/../main/tama
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/led
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/security
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/comm/cdc

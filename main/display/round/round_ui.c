@@ -1,8 +1,6 @@
 /* Round display UI — GC9A01 240×240 */
 #include "round_ui.h"
 #include "usb_hid.h"
-#include "tama_engine.h"
-#include "tama_render.h"
 #include "status_display.h"
 #include "keyboard_config.h"
 #include "hid_bluetooth_manager.h"
@@ -76,7 +74,6 @@ static lv_obj_t *kpm_label       = NULL;
 static bool      ui_initialized    = false;
 static bool      ui_sleeping       = false;
 static bool      ui_showing_splash = false;
-static bool      tama_was_enabled  = false;
 static int       last_bt_state     = -1;
 static int       last_path_state   = -1;
 static TickType_t last_mouse_activity = 0;
@@ -115,27 +112,18 @@ static lv_color_t kpm_color(uint32_t kpm)
     else                return COLOR_SECONDARY;
 }
 
-/* Apply layer label style/position for current tama state.
+/* Apply layer label style/position (nom de couche en grand, centré).
    Must be called with lvgl_port_lock held. */
-static void apply_round_layer_style(bool tama_on)
+static void apply_round_layer_style(void)
 {
     if (!layer_label || !kpm_label) return;
 
-    if (tama_on) {
-        lv_obj_set_style_text_font(layer_label, &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(layer_label, COLOR_SECONDARY, 0);
-        lv_obj_set_width(layer_label, 130);
-        lv_label_set_long_mode(layer_label, LV_LABEL_LONG_DOT);
-        lv_obj_align(layer_label, LV_ALIGN_TOP_MID, 0, 46);
-        lv_obj_align(kpm_label, LV_ALIGN_BOTTOM_MID, 0, -56);
-    } else {
-        lv_obj_set_style_text_font(layer_label, &lv_font_montserrat_28, 0);
-        lv_obj_set_style_text_color(layer_label, COLOR_TEXT, 0);
-        lv_obj_set_width(layer_label, LV_SIZE_CONTENT);
-        lv_label_set_long_mode(layer_label, LV_LABEL_LONG_CLIP);
-        lv_obj_align(layer_label, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_align(kpm_label, LV_ALIGN_BOTTOM_MID, 0, -48);
-    }
+    lv_obj_set_style_text_font(layer_label, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(layer_label, COLOR_TEXT, 0);
+    lv_obj_set_width(layer_label, LV_SIZE_CONTENT);
+    lv_label_set_long_mode(layer_label, LV_LABEL_LONG_CLIP);
+    lv_obj_align(layer_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(kpm_label, LV_ALIGN_BOTTOM_MID, 0, -48);
 }
 
 /* ── UI construction ─────────────────────────────────────────────── */
@@ -238,9 +226,7 @@ static void create_main_ui(void)
     create_kpm_label(scr);
     create_mouse_indicator(scr);
 
-    /* Apply initial layout based on tama state */
-    tama_was_enabled = tama_engine_is_enabled();
-    apply_round_layer_style(tama_was_enabled);
+    apply_round_layer_style();
 
     memset(kpm_history, 0, sizeof(kpm_history));
     kpm_history_index = 0;
@@ -336,7 +322,6 @@ void round_ui_init(void)
 
     if (lvgl_port_lock(200)) {
         create_main_ui();
-        tama_render_create(lv_scr_act(), BOARD_DISPLAY_WIDTH, BOARD_DISPLAY_HEIGHT);
         ui_initialized    = true;
         ui_sleeping       = false;
         ui_showing_splash = false;
@@ -377,13 +362,6 @@ void round_ui_update(void)
 
     if (!lvgl_port_lock(50)) return;
 
-    /* Detect tama state change → relayout */
-    bool tama_on = tama_engine_is_enabled();
-    if (tama_on != tama_was_enabled) {
-        tama_was_enabled = tama_on;
-        apply_round_layer_style(tama_on);
-    }
-
     /* Arc */
     if (outer_arc) {
         int32_t v = (int32_t)((current_kpm * 100) / KPM_MAX_DISPLAY);
@@ -415,10 +393,6 @@ void round_ui_update(void)
             lv_obj_add_flag(caps_indicator, LV_OBJ_FLAG_HIDDEN);
     }
 
-    /* Tama */
-    if (tama_on)
-        tama_render_update(tama_engine_get_state(), tama_engine_get_stats(), tama_engine_get_critter());
-
     lvgl_port_unlock();
 }
 
@@ -436,7 +410,6 @@ void round_ui_sleep(void)
         mouse_indicator = NULL;
         caps_indicator  = NULL;
         kpm_label       = NULL;
-        tama_render_destroy();
         ui_sleeping    = true;
         ui_initialized = false;
         last_bt_state  = -1;
@@ -470,9 +443,7 @@ void round_ui_refresh_all(void)
         mouse_indicator = NULL;
         caps_indicator  = NULL;
         kpm_label       = NULL;
-        tama_render_destroy();
         create_main_ui();
-        tama_render_create(lv_scr_act(), BOARD_DISPLAY_WIDTH, BOARD_DISPLAY_HEIGHT);
         ui_initialized = true;
         lvgl_port_unlock();
     }
@@ -489,8 +460,6 @@ void round_ui_notify_mouse(void)
 void round_ui_notify_keypress(void)
 {
     keypress_count++;
-    if (tama_engine_is_enabled())
-        tama_engine_keypress(current_kpm);
 }
 
 void round_ui_show_splash(const char *text)

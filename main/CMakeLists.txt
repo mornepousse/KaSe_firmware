@@ -67,7 +67,6 @@ if(CONFIG_KASE_HAS_DISPLAY)
             "display/oled/screens/screen_splash.c"
             "display/oled/screens/screen_home.c"
             "display/oled/screens/screen_stats.c"
-            "display/oled/screens/screen_tama.c"
         )
     endif()
     list(APPEND srcs
@@ -90,14 +89,6 @@ if(CONFIG_KASE_HAS_BLE)
     )
 endif()
 
-# Tama virtual pet — keyboard role only
-if(CONFIG_KASE_HAS_TAMA)
-    list(APPEND srcs
-        "tama/tama_engine.c"
-        "tama/tama_render.c"
-    )
-endif()
-
 # NRF24 + ESP-NOW radio stack + HID relay TX — keyboard wireless relay mode only
 if(CONFIG_KASE_KBD_WIRELESS)
     list(APPEND srcs
@@ -110,7 +101,7 @@ if(CONFIG_KASE_KBD_WIRELESS)
         "comm/espnow/espnow_info.c")
 endif()
 
-# Dongle CDC stubs (no-op symbols for tama/bt/display referenced by cdc_binary_cmds.c)
+# Dongle CDC stubs (no-op symbols for bt/display referenced by cdc_binary_cmds.c)
 # and dongle-specific binary commands (RF status, pair list/reset, battery).
 # cr_hmac is kept unconditional: cdc_sec_cmds.c KAT self-test references it directly.
 # cr_crc16 is kept unconditional: tiny file, linker-stripped under NONE/OPENPGP.
@@ -142,7 +133,7 @@ if(CONFIG_KASE_DEVICE_ROLE_DONGLE)
     endif()
 endif()
 
-# CDC stubs for half role (no-op symbols for tama/bt/display/layout)
+# CDC stubs for half role (no-op symbols for bt/display/layout)
 if(CONFIG_KASE_DEVICE_ROLE_HALF)
     list(APPEND srcs "comm/cdc/cdc_half_stubs.c")
 endif()
@@ -280,7 +271,6 @@ idf_component_register(
         "comm/cdc"
         "comm/ble"
         "comm/rf"
-        "tama"
         "input"
         "periph"
         "periph/trackpad"
