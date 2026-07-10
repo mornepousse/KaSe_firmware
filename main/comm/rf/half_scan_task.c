@@ -570,7 +570,10 @@ static void half_scan_task(void *arg)
          * went into a flaky state during testing). Light-sleep validated on
          * non-e-ink halves. Remove this guard once the e-ink half is confirmed on
          * a clean bench. */
-        if (!s_eink_present &&
+        /* NE PAS dormir pendant un pairing : le light-sleep quiesce la radio ~600ms
+         * après l'ouverture de la fenêtre → le PKT_PAIR_REQ n'aboutit jamais. Le
+         * pairing est rare, donc inhiber le sleep tant que s_pairing_active est OK. */
+        if (!s_eink_present && !s_pairing_active &&
             half_power_next(s_last_activity_ms, now) == HALF_POWER_SLEEP) {
             half_sleep_enter();   /* blocks: quiesce -> light-sleep -> restore */
         }
