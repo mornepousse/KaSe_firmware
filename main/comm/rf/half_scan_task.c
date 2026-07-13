@@ -51,6 +51,18 @@
 
 static const char *TAG = "half_scan";
 
+/* OPTION A (2026-07-13) — light-sleep DÉSACTIVÉ sur les halfs. Le chemin de
+ * réveil détruit/recrée la tâche keyboard_button et fait un scan « detect held
+ * key » one-shot SANS debounce/settling → il injecte des touches fantômes au
+ * réveil (mesuré : 2 touches fantômes tenues ~600ms) ET avale la 1re frappe
+ * (celle qui réveille) → frappe très peu fiable après chaque pause >15s.
+ * Le scan lui-même est sain (1 appui = 1 DN + 1 UP nets, RF ack~100%).
+ * Réactiver en passant à 1 UNE FOIS le chemin de réveil réparé (ne pas émettre
+ * les touches détectées au réveil sans les repasser par le debounce).
+ * Power-save à repenser avec l'ESP-NOW intermittent.
+ * Détail : docs/DONGLE_ARCHI_ET_HALF_TYPING_2026-07-13.md (bug #1). */
+#define HALF_LIGHT_SLEEP_ENABLED 0
+
 /* ── Radio state ────────────────────────────────────────────── */
 /* Non-static: shared with trackpad.c via extern rf_radio_t s_radio.
  * trackpad_task calls rf_driver_send(&s_radio, ...) to send PKT_TRACKPAD. */
@@ -348,7 +360,6 @@ static void heartbeat_timer_cb(void *arg)
     if (emit_hb) {
         rf_heartbeat_t hb;
         memset(&hb, 0, sizeof(hb));
-        memcpy(hb.bitmap, s_pressed_bitmap, RF_HALF_BITMAP_BYTES);
         hb.batt_dV = 0;   /* MVP: battery not measured */
         /* link_q = retransmit percentage (0..100): Σ ARC_CNT × 100 / (tx_count × 3).
          * 0 = pristine, 100 = every packet maxing all 3 retries. Catches a degrading
@@ -365,8 +376,16 @@ static void heartbeat_timer_cb(void *arg)
         rf_tx_max_rt_count = 0;   /* still cleared (used elsewhere for debug) */
 
         uint8_t buf[9];
-        rf_encode_heartbeat(buf, &hb);
+        /* Capture le pressed-bitmap SOUS le lock SPI — atomique vis-à-vis du TX
+         * des key-edges (tx_key_event prend le même lock). Le capturer plus tôt
+         * (hors lock) laissait un RELEASE edge partir AVANT un heartbeat portant
+         * un bitmap=pressé périmé → le dongle (hb_reconcile) re-pressait la touche
+         * juste relâchée (force_press) → touche collée jusqu'au heartbeat suivant
+         * → auto-repeat doublons + modificateur collé. Mesuré : holds quantifiés à
+         * la cadence heartbeat. Cf. docs/DONGLE_ARCHI_ET_HALF_TYPING_2026-07-13.md. */
         half_spi_lock();
+        memcpy(hb.bitmap, s_pressed_bitmap, RF_HALF_BITMAP_BYTES);
+        rf_encode_heartbeat(buf, &hb);
         bool ok = rf_driver_send(&s_radio, buf, 9);
         half_spi_unlock();
         if (!ok) {
@@ -573,11 +592,20 @@ static void half_scan_task(void *arg)
         /* NE PAS dormir pendant un pairing : le light-sleep quiesce la radio ~600ms
          * après l'ouverture de la fenêtre → le PKT_PAIR_REQ n'aboutit jamais. Le
          * pairing est rare, donc inhiber le sleep tant que s_pairing_active est OK. */
-        if (!s_eink_present && !s_pairing_active &&
+        if (HALF_LIGHT_SLEEP_ENABLED &&
+            !s_eink_present && !s_pairing_active &&
             half_power_next(s_last_activity_ms, now) == HALF_POWER_SLEEP) {
             half_sleep_enter();   /* blocks: quiesce -> light-sleep -> restore */
         }
     }
+}
+
+/* ms since the last key event — lets the e-ink task defer its slow refresh
+ * while the user is typing (see half_scan_task.h). */
+uint32_t half_kbd_idle_ms(void)
+{
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    return now - s_last_activity_ms;
 }
 
 /* ── Sleep/wake helpers ─────────────────────────────────────── */

@@ -2,6 +2,7 @@
 #define HALF_SCAN_TASK_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /* Start the half scan task (keyboard_button init + NRF PTX init + heartbeat timer).
  * Called from app_main() in the HALF role branch. */
@@ -25,6 +26,11 @@ void half_scan_arm_key_wake(void);
 
 /* Disarm GPIO wake registrations after esp_light_sleep_start() returns. */
 void half_scan_disarm_key_wake(void);
+
+/* Milliseconds since the last key event (press or release). Used to defer the
+ * e-ink refresh while typing — the 1.5 s panel refresh starves the matrix scan
+ * (→ missed releases / stuck keys), so the dashboard only renders at a pause. */
+uint32_t half_kbd_idle_ms(void);
 
 #ifdef TEST_HOST
 /* In test builds: provide a minimal keyboard_btn_data_t stub (matches the real

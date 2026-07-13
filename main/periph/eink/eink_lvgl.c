@@ -47,7 +47,14 @@
 #include "esp_partition.h"  /* esp_partition iteration — flash footprint */
 #include "driver/temperature_sensor.h"  /* CPU temp */
 #include "rf_pairing.h"     /* rf_pairing_load_set_id_half, rf_derive_wifi_ch */
+#include "half_scan_task.h" /* half_kbd_idle_ms — defer refresh while typing */
 #include "board.h"          /* BOARD_NRF_ADDR_SUFFIX (this half's slot fallback) */
+
+/* Defer the slow e-ink refresh until the keyboard has been idle this long.
+ * The panel refresh (~1.5 s) contends for the SPI bus / CPU and starves the
+ * matrix scan → missed key releases (stuck keys). 300 ms = render only in a
+ * real typing pause; the e-ink dashboard is cosmetic, latency is irrelevant. */
+#define EINK_TYPING_DEFER_MS 300
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -315,9 +322,18 @@ static void eink_lvgl_task(void *arg)
     ESP_LOGI(TAG, "eink_lvgl_task started");
 
     for (;;) {
-        /* Run LVGL timers (drives pending invalidations from previous notify). */
-        uint32_t sleep_ms = lv_timer_handler();
-        if (sleep_ms == 0 || sleep_ms > 50) sleep_ms = 50;
+        /* Run LVGL timers (render + flush) — but DEFER while the user is typing.
+         * The panel refresh (~1.5 s) contends for the SPI bus / CPU and starves
+         * the matrix scan → missed key releases (stuck keys). LVGL keeps its
+         * invalidations pending across skipped passes, so the dashboard catches
+         * up at the next typing pause. */
+        uint32_t sleep_ms;
+        if (half_kbd_idle_ms() < EINK_TYPING_DEFER_MS) {
+            sleep_ms = 50;                 /* typing: poll again soon, no render */
+        } else {
+            sleep_ms = lv_timer_handler();
+            if (sleep_ms == 0 || sleep_ms > 50) sleep_ms = 50;
+        }
 
         /* Wait for LVGL timer OR notify (bit 0 = layer, bit 1 = status). */
         uint32_t notify_val = 0;
