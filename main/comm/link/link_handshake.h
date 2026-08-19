@@ -108,6 +108,20 @@ static inline link_hs_action_t link_hs_step(link_hs_t *h, link_hs_event_t ev,
             return LINK_HS_ACT_DISABLE_5V;
         }
         return LINK_HS_ACT_NONE;
+
+    default:
+        /* h->state hors énumération : contrat d'appel violé (struct sur pile
+         * non passée par link_hs_init(), mémoire arbitraire). Ce module est le
+         * dernier rempart avant le GPIO du load switch, et link_hs_5v_enabled()
+         * est public — un appelant qui l'interroge dans cet état ne doit
+         * jamais lire un `true` de poubelle alors qu'aucun ACT_ENABLE_5V n'a
+         * été émis. Ici, la propriété « 5 V éteint sauf preuve du contraire »
+         * prime sur le diagnostic : on retombe du côté sûr plutôt que de
+         * préserver une valeur inconnue.
+         */
+        h->state = LINK_HS_IDLE;
+        h->en_5v = false;
+        return LINK_HS_ACT_NONE;
     }
     return LINK_HS_ACT_NONE;
 }
