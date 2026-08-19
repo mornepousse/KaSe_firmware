@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "rf_packet.h"   /* RF_HALF_BITMAP_BYTES — même bitmap qu'en RF */
+#include "cdc_binary_protocol.h"   /* ks_crc8() — réutilisé, pas réimplémenté */
 
 #define LINK_SOF          0x4Eu
 #define LINK_TYPE_MATRIX  0x01u
@@ -31,17 +32,13 @@ typedef struct {
     uint8_t bitmap[RF_HALF_BITMAP_BYTES];
 } link_frame_t;
 
-/* CRC-8, polynôme 0x07, init 0x00 — identique au protocole CDC binaire, pour
- * n'avoir qu'une seule implémentation de CRC à relire dans le dépôt. */
+/* Le lien réutilise ks_crc8() du protocole CDC binaire (cdc_binary_protocol.c)
+ * au lieu de réimplémenter un CRC-8 — une seule implémentation à relire dans
+ * le dépôt. link_crc8() reste une fonction à part pour préserver l'interface
+ * du module et documenter que c'est bien le CRC du dépôt qui est utilisé ici. */
 static inline uint8_t link_crc8(const uint8_t *data, uint16_t len)
 {
-    uint8_t crc = 0x00;
-    for (uint16_t i = 0; i < len; i++) {
-        crc ^= data[i];
-        for (uint8_t b = 0; b < 8; b++)
-            crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
-    }
-    return crc;
+    return ks_crc8(data, len);
 }
 
 static inline uint16_t link_encode_matrix(uint8_t *buf,
