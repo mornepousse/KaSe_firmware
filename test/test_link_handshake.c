@@ -202,12 +202,79 @@ static void test_usb_lost_drops_5v(void)
 
 static void test_no_probe_without_usb(void)
 {
-    /* Sur batterie seule, on ne sonde pas : on n'a rien à donner. */
+    /* Sur batterie seule, on ne sonde pas : on n'a rien à donner. Même après
+     * une longue attente — plusieurs multiples de l'intervalle de re-sonde —
+     * l'absence d'USB doit rester la seule raison qui bloque tout. */
     link_hs_t hs;
     link_hs_init(&hs);
-    link_hs_action_t a = link_hs_step(&hs, LINK_HS_EV_TICK, 500);
-    TEST_ASSERT_EQ(a, LINK_HS_ACT_NONE, "pas d'USB → pas de sonde");
-    TEST_ASSERT_EQ(hs.state, LINK_HS_IDLE, "on reste au repos");
+    for (uint32_t t = 0; t <= 5 * LINK_HS_REPROBE_INTERVAL_MS; t += 100) {
+        link_hs_action_t a = link_hs_step(&hs, LINK_HS_EV_TICK, t);
+        TEST_ASSERT_EQ(a, LINK_HS_ACT_NONE, "pas d'USB → jamais de sonde, même après un long moment");
+        TEST_ASSERT_EQ(hs.state, LINK_HS_IDLE, "on reste au repos");
+    }
+}
+
+static void test_lost_probe_eventually_reprobes(void)
+{
+    /* Un ACK perdu ne doit pas condamner le lien jusqu'au rebranchement du
+     * câble : USB_PRESENT est un événement de front, il ne reviendra pas
+     * tout seul. IDLE doit re-sonder tant que h->usb reste vrai. */
+    link_hs_t hs;
+    link_hs_init(&hs);
+
+    link_hs_action_t a0 = link_hs_step(&hs, LINK_HS_EV_USB_PRESENT, 0);
+    TEST_ASSERT_EQ(a0, LINK_HS_ACT_SEND_PROBE, "présence USB → première sonde");
+    TEST_ASSERT_EQ(hs.state, LINK_HS_PROBING, "en sonde");
+
+    /* La sonde se perd : timeout, retour à IDLE sans avoir jamais levé le 5V. */
+    link_hs_action_t a1 = link_hs_step(&hs, LINK_HS_EV_TICK, LINK_HS_PROBE_TIMEOUT_MS);
+    TEST_ASSERT_EQ(a1, LINK_HS_ACT_NONE, "timeout de sonde → abandon");
+    TEST_ASSERT_EQ(hs.state, LINK_HS_IDLE, "retour au repos");
+    TEST_ASSERT(!link_hs_5v_enabled(&hs), "5 V toujours mort");
+
+    /* Pas encore l'heure de re-sonder : l'intervalle n'est pas écoulé. */
+    link_hs_action_t a2 = link_hs_step(&hs, LINK_HS_EV_TICK, LINK_HS_PROBE_TIMEOUT_MS + 1);
+    TEST_ASSERT_EQ(a2, LINK_HS_ACT_NONE, "pas encore l'heure de re-sonder");
+    TEST_ASSERT_EQ(hs.state, LINK_HS_IDLE, "toujours au repos");
+
+    /* L'intervalle de re-sonde est écoulé depuis l'entrée en IDLE : la
+     * machine reparte d'elle-même, sans nouvel événement USB_PRESENT. */
+    uint32_t t_reprobe = LINK_HS_PROBE_TIMEOUT_MS + LINK_HS_REPROBE_INTERVAL_MS;
+    link_hs_action_t a3 = link_hs_step(&hs, LINK_HS_EV_TICK, t_reprobe);
+    TEST_ASSERT_EQ(a3, LINK_HS_ACT_SEND_PROBE, "sonde perdue → re-sonde automatique après l'intervalle");
+    TEST_ASSERT_EQ(hs.state, LINK_HS_PROBING, "repart en sonde");
+    TEST_ASSERT(!link_hs_5v_enabled(&hs), "sonder n'est pas lever le 5 V");
+}
+
+static void test_probe_timeout_wraps_uint32_cleanly(void)
+{
+    /* link_hs_step gère le débordement uint32 de now_ms via une soustraction
+     * non signée. On n'a pas de test qui force ce chemin — un futur
+     * "correctif" du genre `if (now_ms < since_ms) return;` casserait la
+     * propriété silencieusement. since_ms proche de UINT32_MAX, now_ms après
+     * le passage à zéro. */
+    link_hs_t hs;
+    link_hs_init(&hs);
+    hs.usb = true;
+    hs.state = LINK_HS_PROBING;
+    hs.since_ms = 0xFFFFFFF0u; /* entrée en PROBING juste avant le débordement */
+
+    /* now_ms a débordé (wrap) mais l'écart réel n'est que de 199 ms :
+     * 0xFFFFFFF0 + 199 déborde à 183. Pas encore le timeout. */
+    uint32_t elapsed_199 = (uint32_t)(0xFFFFFFF0u + (LINK_HS_PROBE_TIMEOUT_MS - 1));
+    link_hs_action_t a0 = link_hs_step(&hs, LINK_HS_EV_TICK, elapsed_199);
+    TEST_ASSERT_EQ(a0, LINK_HS_ACT_NONE, "199 ms après le wrap → pas encore le timeout");
+    TEST_ASSERT_EQ(hs.state, LINK_HS_PROBING, "toujours en sonde");
+
+    /* Exactement 200 ms plus tard (toujours après le wrap) : le timeout doit
+     * se déclencher normalement, malgré now_ms < since_ms en arithmétique
+     * signée. */
+    hs.since_ms = 0xFFFFFFF0u;
+    hs.state = LINK_HS_PROBING;
+    uint32_t elapsed_200 = (uint32_t)(0xFFFFFFF0u + LINK_HS_PROBE_TIMEOUT_MS);
+    link_hs_action_t a1 = link_hs_step(&hs, LINK_HS_EV_TICK, elapsed_200);
+    TEST_ASSERT_EQ(a1, LINK_HS_ACT_NONE, "timeout de sonde déclenché malgré le wrap de now_ms");
+    TEST_ASSERT_EQ(hs.state, LINK_HS_IDLE, "retour au repos malgré le wrap");
 }
 
 void test_link_handshake(void)
@@ -227,4 +294,6 @@ void test_link_handshake(void)
     test_usb_gone_already_dead_from_probing();
     test_late_ack_after_timeout_still_accepted();
     test_unknown_state_falls_safe_without_init();
+    test_lost_probe_eventually_reprobes();
+    test_probe_timeout_wraps_uint32_cleanly();
 }

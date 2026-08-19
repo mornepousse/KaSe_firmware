@@ -15,6 +15,12 @@
 
 #define LINK_HS_PROBE_TIMEOUT_MS  200   /* attente d'un ACK après la sonde */
 #define LINK_HS_PEER_TIMEOUT_MS   500   /* silence du pair toléré, lien établi */
+/* Intervalle entre deux sondes en IDLE tant que l'USB est présent. USB_PRESENT
+ * est un événement de FRONT (pas un état relu ailleurs) : sans re-sonde
+ * périodique, une seule sonde perdue au boot condamnerait le lien jusqu'au
+ * débranchement/rebranchement du câble. Même ordre de grandeur que
+ * LINK_HS_PROBE_TIMEOUT_MS pour ne pas spammer la ligne. */
+#define LINK_HS_REPROBE_INTERVAL_MS  300
 
 typedef enum {
     LINK_HS_IDLE = 0,   /* 5 V mort, rien en cours */
@@ -81,6 +87,19 @@ static inline link_hs_action_t link_hs_step(link_hs_t *h, link_hs_event_t ev,
     case LINK_HS_IDLE:
         /* On ne sonde que si on a du courant à donner. */
         if (ev == LINK_HS_EV_USB_PRESENT) {
+            h->state = LINK_HS_PROBING;
+            h->since_ms = now_ms;
+            return LINK_HS_ACT_SEND_PROBE;
+        }
+        /* USB_PRESENT est un événement de front : si une sonde s'est perdue
+         * (timeout de PROBING nous a ramenés ici avec h->usb toujours vrai),
+         * rien ne le relèvera jamais tout seul. Re-sonder périodiquement tant
+         * que l'USB reste là — sans ça, un seul ACK perdu au boot condamne le
+         * lien jusqu'au débranchement du câble. Ne PAS lever en_5v ici : ceci
+         * ne fait que renvoyer la sonde, la propriété de sûreté (5V seulement
+         * après PEER_ACK) est inchangée. */
+        if (ev == LINK_HS_EV_TICK && h->usb &&
+            (uint32_t)(now_ms - h->since_ms) >= LINK_HS_REPROBE_INTERVAL_MS) {
             h->state = LINK_HS_PROBING;
             h->since_ms = now_ms;
             return LINK_HS_ACT_SEND_PROBE;
