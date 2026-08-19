@@ -7,6 +7,25 @@
 #include "test_framework.h"
 #include "../main/comm/link/link_frame.h"
 
+static void test_crc8_delegates_to_ks_crc8(void)
+{
+    /* link_crc8() n'est censé être qu'un alias de ks_crc8() (une seule
+     * implémentation CRC-8 dans le dépôt) — les tests round-trip ne testent
+     * que la propriété, pas la valeur : une réimplémentation cohérente avec
+     * elle-même les laisserait verts. Cette assertion épingle la valeur. */
+    const uint8_t v1[] = {0x4B, 0x53};
+    const uint8_t v2[] = {0x01};
+    const uint8_t v3[] = {0xA5, 0x00, 0x3C, 0xFF, 0x01};
+    TEST_ASSERT_EQ(link_crc8(v1, sizeof(v1)), ks_crc8(v1, sizeof(v1)),
+                   "link_crc8 == ks_crc8 sur [0x4B,0x53]");
+    TEST_ASSERT_EQ(link_crc8(v2, sizeof(v2)), ks_crc8(v2, sizeof(v2)),
+                   "link_crc8 == ks_crc8 sur [0x01]");
+    TEST_ASSERT_EQ(link_crc8(v3, sizeof(v3)), ks_crc8(v3, sizeof(v3)),
+                   "link_crc8 == ks_crc8 sur un bitmap");
+    TEST_ASSERT_EQ(link_crc8(NULL, 0), ks_crc8(NULL, 0),
+                   "link_crc8 == ks_crc8 sur len=0");
+}
+
 static void test_roundtrip_matrix(void)
 {
     const uint8_t bitmap[RF_HALF_BITMAP_BYTES] = {0xA5, 0x00, 0x3C, 0xFF, 0x01};
@@ -85,6 +104,7 @@ static void test_null_arguments(void)
 void test_link_frame(void)
 {
     printf("\n-- trame du lien inter-moitiés --\n");
+    test_crc8_delegates_to_ks_crc8();
     test_roundtrip_matrix();
     test_rejects_bad_crc();
     test_rejects_bad_sof();
