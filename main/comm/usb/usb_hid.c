@@ -2,6 +2,7 @@
 #include "tinyusb_cdc_acm.h"
 #include "tinyusb_default_config.h"
 #include "usb_hid.h"
+#include "hid_transport.h"   /* hid_transport_init() */
 #include "esp_log.h"
 #include "i2c_oled_display.h"
 #include "cdc_acm_com.h"
@@ -379,6 +380,8 @@ void usb_try_remote_wakeup(void)
 
 void kase_tinyusb_init(void)
 {
+    hid_transport_init();   /* USB tx mutex, before any report can be sent */
+
 #if CONFIG_KASE_SEC_OPENPGP
     /* Force-link the CCID class driver so its strong usbd_app_driver_get_cb
      * overrides the weak default before tinyusb_driver_install() reads it.

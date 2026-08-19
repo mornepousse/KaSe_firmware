@@ -7,31 +7,103 @@
 #include "tinyusb.h"
 #include "class/hid/hid_device.h"
 #include "hid_bluetooth_manager.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "esp_rom_sys.h"   /* esp_rom_delay_us — tick-independent short wait */
 #include <string.h>
+
+static const char *TAG_HTX = "HID_TX";
 
 #define REPORT_ID_KEYBOARD 1
 #define REPORT_ID_MOUSE    2
 
-static void send_usb_kb_mouse(uint8_t modifier, const uint8_t kb[6],
+/* ── USB endpoint arbitration (audit F1) ─────────────────────────────────────
+ * The HID IN endpoint is an interrupt EP polled every 1 ms (see usb_hid.c), and
+ * the sender task drains its queue in a tight loop: a burst of >= 2 reports
+ * finds the EP still busy on the second one. Dropping it there loses whatever
+ * that report carried — and when it is the "everything released" report, the
+ * host keeps the modifier down forever (stuck Super after a shortcut), because
+ * nothing ever retransmits it.
+ *
+ * So: wait for the endpoint instead of dropping, and tell the caller whether the
+ * report actually left. A few ms is invisible to a typist and bounded, so a dead
+ * host (unplugged, suspended) cannot wedge the sender.
+ *
+ * The wait is a short busy-poll, not vTaskDelay: the FreeRTOS tick is 10 ms
+ * (CONFIG_FREERTOS_HZ=100) so pdMS_TO_TICKS(1) rounds to 0 and a tick-based wait
+ * would either not wait at all or cost a full 10 ms per burst. The USB task runs
+ * at a higher priority than the sender, so it still preempts this poll and
+ * services the endpoint.
+ *
+ * The mutex serialises the TinyUSB calls: hid_send_* is reached both from the
+ * sender task and directly from the keyboard task (send_tap for tap-dance /
+ * leader / macros), and the TinyUSB device API is not reentrant. */
+#define USB_HID_TX_WAIT_US 2500   /* > 2 full-speed frames (1 ms each) */
+#define USB_HID_TX_POLL_US 100
+
+static SemaphoreHandle_t s_usb_tx_mutex = NULL;
+
+void hid_transport_init(void)
+{
+    if (s_usb_tx_mutex == NULL) s_usb_tx_mutex = xSemaphoreCreateMutex();
+}
+
+static inline bool usb_tx_lock(void)
+{
+    if (s_usb_tx_mutex == NULL) return true;   /* pre-init: single caller anyway */
+    return xSemaphoreTake(s_usb_tx_mutex, pdMS_TO_TICKS(50)) == pdTRUE;
+}
+
+static inline void usb_tx_unlock(void)
+{
+    if (s_usb_tx_mutex != NULL) xSemaphoreGive(s_usb_tx_mutex);
+}
+
+/* Wait until the HID endpoint can take a report, or give up after
+ * USB_HID_TX_WAIT_US. Must be called with the tx mutex held. */
+static bool usb_hid_wait_ready(void)
+{
+    for (int waited = 0; waited < USB_HID_TX_WAIT_US; waited += USB_HID_TX_POLL_US) {
+        if (tud_hid_ready()) return true;   /* EP frees on the next SOF (<= 1 ms) */
+        esp_rom_delay_us(USB_HID_TX_POLL_US);
+    }
+    return tud_hid_ready();
+}
+
+static bool send_usb_kb_mouse(uint8_t modifier, const uint8_t kb[6],
                               uint8_t buttons, int8_t x, int8_t y, int8_t wheel)
 {
-    if (tud_hid_ready()) {
-        tud_hid_keyboard_report(REPORT_ID_KEYBOARD, modifier, kb);
-        if (buttons || x || y || wheel)
+    if (!usb_tx_lock()) return false;
+    bool ok = usb_hid_wait_ready();
+    if (ok) {
+        ok = tud_hid_keyboard_report(REPORT_ID_KEYBOARD, modifier, kb);
+        if ((buttons || x || y || wheel) && usb_hid_wait_ready())
             tud_hid_mouse_report(REPORT_ID_MOUSE, buttons, x, y, wheel, 0);
     }
+    usb_tx_unlock();
+    if (!ok) ESP_LOGW(TAG_HTX, "kb+mouse report not sent (EP busy %d us)", USB_HID_TX_WAIT_US);
+    return ok;
 }
 
-static void send_usb_keyboard(uint8_t modifier, const uint8_t kb[6])
+static bool send_usb_keyboard(uint8_t modifier, const uint8_t kb[6])
 {
-    if (tud_hid_ready())
-        tud_hid_keyboard_report(REPORT_ID_KEYBOARD, modifier, kb);
+    if (!usb_tx_lock()) return false;
+    bool ok = usb_hid_wait_ready() &&
+              tud_hid_keyboard_report(REPORT_ID_KEYBOARD, modifier, kb);
+    usb_tx_unlock();
+    if (!ok) ESP_LOGW(TAG_HTX, "kb report not sent (EP busy %d us)", USB_HID_TX_WAIT_US);
+    return ok;
 }
 
-static void send_usb_mouse(uint8_t buttons, int8_t x, int8_t y, int8_t wheel)
+static bool send_usb_mouse(uint8_t buttons, int8_t x, int8_t y, int8_t wheel)
 {
-    if (tud_hid_ready())
-        tud_hid_mouse_report(REPORT_ID_MOUSE, buttons, x, y, wheel, 0);
+    if (!usb_tx_lock()) return false;
+    bool ok = usb_hid_wait_ready() &&
+              tud_hid_mouse_report(REPORT_ID_MOUSE, buttons, x, y, wheel, 0);
+    usb_tx_unlock();
+    return ok;
 }
 
 static inline bool bt_ready(void)
@@ -39,31 +111,37 @@ static inline bool bt_ready(void)
     return hid_bluetooth_is_initialized() && hid_bluetooth_is_connected();
 }
 
-void hid_send_kb_mouse(uint8_t modifier, const uint8_t kb[6],
+bool hid_send_kb_mouse(uint8_t modifier, const uint8_t kb[6],
                        uint8_t buttons, int8_t x, int8_t y, int8_t wheel)
 {
     if (usb_bl_state == 0) {
-        send_usb_kb_mouse(modifier, kb, buttons, x, y, wheel);
+        return send_usb_kb_mouse(modifier, kb, buttons, x, y, wheel);
     } else if (bt_ready()) {
         send_hid_bl_key(modifier, kb);
         send_hid_bl_mouse(buttons, x, y, wheel);
+        return true;
     }
+    return false;   /* BLE selected but not connected: the report is lost */
 }
 
-void hid_send_keyboard(uint8_t modifier, const uint8_t kb[6])
+bool hid_send_keyboard(uint8_t modifier, const uint8_t kb[6])
 {
     if (usb_bl_state == 0) {
-        send_usb_keyboard(modifier, kb);
+        return send_usb_keyboard(modifier, kb);
     } else if (bt_ready()) {
         send_hid_bl_key(modifier, kb);
+        return true;
     }
+    return false;
 }
 
-void hid_send_mouse(uint8_t buttons, int8_t x, int8_t y, int8_t wheel)
+bool hid_send_mouse(uint8_t buttons, int8_t x, int8_t y, int8_t wheel)
 {
     if (usb_bl_state == 0) {
-        send_usb_mouse(buttons, x, y, wheel);
+        return send_usb_mouse(buttons, x, y, wheel);
     } else if (bt_ready()) {
         send_hid_bl_mouse(buttons, x, y, wheel);
+        return true;
     }
+    return false;
 }

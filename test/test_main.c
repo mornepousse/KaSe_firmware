@@ -48,6 +48,7 @@ extern void test_openpgp_do(void);
 extern void test_openpgp_card(void);
 extern void test_cfg_bridge(void);
 extern void test_kbd_route(void);
+extern void test_hid_dedup(void);
 extern void test_oled_stats(void);
 
 int main(void) {
@@ -96,6 +97,7 @@ int main(void) {
     test_openpgp_card();
     test_cfg_bridge();
     test_kbd_route();
+    test_hid_dedup();
     test_oled_stats();
 
     printf("\n========================================\n");

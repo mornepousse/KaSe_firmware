@@ -3,14 +3,24 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
+
+/* Create the USB tx mutex. Call once, before any hid_send_*. */
+void hid_transport_init(void);
+
+/* The hid_send_* functions return whether the report actually reached the host.
+   Callers MUST NOT record a report as sent on a false return: a report believed
+   sent is never retransmitted, and a lost key-up then sticks the key on the host
+   (audit F1, docs/CODE_AUDIT_2026-07-07.md). On USB the send waits for a busy
+   endpoint rather than dropping, so false means the host is really unreachable. */
 
 /* Send a combined keyboard+mouse HID report via the active transport.
    Handles BLE initialization check and automatic fallback to USB. */
-void hid_send_kb_mouse(uint8_t modifier, const uint8_t kb[6],
+bool hid_send_kb_mouse(uint8_t modifier, const uint8_t kb[6],
                        uint8_t buttons, int8_t x, int8_t y, int8_t wheel);
 
 /* Send a keyboard-only HID report via the active transport. */
-void hid_send_keyboard(uint8_t modifier, const uint8_t kb[6]);
+bool hid_send_keyboard(uint8_t modifier, const uint8_t kb[6]);
 
 /* Send a mouse-only HID report via the active transport. */
-void hid_send_mouse(uint8_t buttons, int8_t x, int8_t y, int8_t wheel);
+bool hid_send_mouse(uint8_t buttons, int8_t x, int8_t y, int8_t wheel);

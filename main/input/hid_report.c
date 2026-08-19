@@ -5,6 +5,8 @@
 #include "matrix_scan.h"
 #include "key_definitions.h"
 #include "key_processor.h"   /* key_processor_report_mods() — mods portés hors keycodes[] (M7) */
+#include "hid_dedup.h"       /* commit-only-on-success (audit F1) */
+#include "esp_timer.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -129,21 +131,22 @@ static void hid_sender_task(void *pvParameters)
 
 void send_hid_key(void)
 {
-    static uint8_t last_kc[6] = {0};
-    static uint8_t last_mod = 0;
-    static TickType_t last_tick = 0;
+    /* Dedup state. Committed ONLY when the report was actually accepted — see
+     * hid_dedup.h: a report wrongly marked as sent is never retransmitted, and a
+     * lost key-up then sticks the key on the host (audit F1). */
+    static hid_dedup_t dedup;
 
     uint8_t modifier = 0;
     extract_modifiers(keycodes, &modifier);      /* mods de touches physiques (0xE0-0xE7) */
     modifier |= key_processor_report_mods();     /* + mods tap-hold/OSM/… portés à part (M7) */
     current_modifiers = modifier;
 
-    /* Coalesce identical reports */
-    if (memcmp(keycodes, last_kc, sizeof(keycodes)) == 0 && modifier == last_mod) {
-        uint32_t elapsed = (uint32_t)(xTaskGetTickCount() - last_tick);
-        if (elapsed < (uint32_t)pdMS_TO_TICKS(KEY_ENQUEUE_MIN_MS))
-            return;
-    }
+    /* Real milliseconds, not ticks: the FreeRTOS tick is 10 ms here, so a
+     * tick-based comparison against an 8 ms window is always 0. */
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+
+    if (!hid_dedup_should_send(&dedup, keycodes, modifier, now_ms, KEY_ENQUEUE_MIN_MS))
+        return;
 
     hid_msg_t msg = { .type = HID_MSG_KEYBOARD, .enqueue_tick = xTaskGetTickCount() };
     memcpy(msg.payload.keyboard.keycodes, keycodes, 6);
@@ -165,23 +168,35 @@ void send_hid_key(void)
                     combined.payload.kb_mouse.y = peek.payload.mouse.y;
                     combined.payload.kb_mouse.wheel = peek.payload.mouse.wheel;
                     if (xQueueSendToFront(hid_queue, &combined, pdMS_TO_TICKS(5)) == pdTRUE) {
-                        memcpy(last_kc, keycodes, 6); last_mod = modifier; last_tick = xTaskGetTickCount();
+                        hid_dedup_commit(&dedup, keycodes, modifier, now_ms);
                         return;
                     }
-                    xQueueSendToFront(hid_queue, &peek, pdMS_TO_TICKS(5));
+                    /* Combined enqueue failed: put the mouse msg back and leave the
+                     * keyboard report uncommitted so the next cycle re-sends it. */
+                    if (xQueueSendToFront(hid_queue, &peek, pdMS_TO_TICKS(5)) != pdTRUE)
+                        ESP_LOGW(TAG, "mouse msg lost (queue full)");
                     return;
                 }
                 xQueueSendToFront(hid_queue, &peek, 0);
             }
         }
-        xQueueSend(hid_queue, &msg, pdMS_TO_TICKS(5));
-    } else {
-#if CONFIG_KASE_KBD_WIRELESS
-        if (kbd_active_route() == KBD_OUT_RF) { kbd_relay_send_kbd(modifier, keycodes); return; }
-#endif
-        hid_send_keyboard(modifier, keycodes);
+        if (xQueueSend(hid_queue, &msg, pdMS_TO_TICKS(5)) == pdTRUE)
+            hid_dedup_commit(&dedup, keycodes, modifier, now_ms);
+        else
+            ESP_LOGW(TAG, "kb report not queued (full) — will retry next cycle");
+        return;
     }
-    memcpy(last_kc, keycodes, 6); last_mod = modifier; last_tick = xTaskGetTickCount();
+
+#if CONFIG_KASE_KBD_WIRELESS
+    if (kbd_active_route() == KBD_OUT_RF) {
+        kbd_relay_send_kbd(modifier, keycodes);
+        hid_dedup_commit(&dedup, keycodes, modifier, now_ms);
+        return;
+    }
+#endif
+    /* No queue (sender task absent): send inline and only commit on success. */
+    if (hid_send_keyboard(modifier, keycodes))
+        hid_dedup_commit(&dedup, keycodes, modifier, now_ms);
 }
 
 void send_mouse_report(uint8_t buttons, int8_t x, int8_t y, int8_t wheel)
