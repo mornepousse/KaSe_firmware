@@ -25,10 +25,15 @@ config KASE_HAS_LOCAL_MATRIX
 
 config KASE_HAS_DISPLAY
     bool
+    default n if KASE_NIPHAR_MASTER
     default y if KASE_DEVICE_ROLE_KEYBOARD
     default n
     help
-        Compiles display backends and status display task.
+        Compiles display backends and status display task. Niphargus left
+        (KASE_NIPHAR_MASTER) has no screen at all (J12 unpopulated — see
+        docs/NIPHARGUS_V2_HARDWARE.md) and must take priority over the
+        KEYBOARD-role default: Kconfig honors the first satisfied `default`
+        in source order, so this override has to come first.
 
 config KASE_HAS_BLE
     bool

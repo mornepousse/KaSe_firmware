@@ -12,7 +12,6 @@
 #ifdef ESP_PLATFORM
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
-#include "driver/i2c.h"
 #endif
 
 /* ── Identité produit ── */
@@ -95,29 +94,11 @@
 /* ── Pas d'écran sur la gauche (connecteur J12 non peuplé) ──────
  * docs/NIPHARGUS_V2_HARDWARE.md : l'écran Sharp memory-LCD (J4, SPI,
  * write-only, CS=GPIO14) n'est peuplé que côté DROITE ; le connecteur miroir
- * J12 côté gauche est vide. Le rôle KASE_DEVICE_ROLE_KEYBOARD compile
- * inconditionnellement le backend display (main/CMakeLists.txt tranche entre
- * round/oled sur la seule présence de BOARD_DISPLAY_BACKEND_ROUND, sinon
- * oled par défaut) — il n'existe aujourd'hui aucun interrupteur board.h pour
- * dire "pas d'écran du tout". Les macros ci-dessous ne décrivent AUCUN pin
- * réel : GPIO_NUM_NC partout où le contrat n'a rien à offrir, pour ne jamais
- * inventer un numéro. Elles satisfont uniquement la compilation du backend
- * OLED mort (jamais flashé côté gauche) ; désactiver proprement la
- * compilation display pour ce rôle est un chantier à part (voir rapport de
- * tâche 1). */
-#define BOARD_DISPLAY_BUS           DISPLAY_BUS_I2C
-#define BOARD_DISPLAY_WIDTH         0
-#define BOARD_DISPLAY_HEIGHT        0
-#define BOARD_DISPLAY_CLK_HZ        (400 * 1000)
-#define BOARD_DISPLAY_RESET         GPIO_NUM_NC
-#define BOARD_DISPLAY_I2C_HOST      I2C_NUM_0
-#define BOARD_DISPLAY_I2C_SDA       GPIO_NUM_NC
-#define BOARD_DISPLAY_I2C_SCL       GPIO_NUM_NC
-#define BOARD_DISPLAY_I2C_ADDR      0x00
-#define BOARD_DISPLAY_I2C_PULLUPS   false
-#define UI_FONT                     &lv_font_montserrat_14
-#define BOARD_DISPLAY_SLEEP_MS      0
-
+ * J12 côté gauche est vide. CONFIG_KASE_HAS_DISPLAY est mis à `n` pour
+ * KASE_NIPHAR_MASTER dans main/Kconfig.projbuild (le premier `default`
+ * satisfait gagne, avant le `default y if KASE_DEVICE_ROLE_KEYBOARD`) — donc
+ * aucune macro BOARD_DISPLAY_* fantôme ici : ce serait décrire un écran qui
+ * n'existe pas. */
 #define BOARD_HAS_LED_STRIP  0
 
 /* ── Scan matrice ──────────────────────────────────────────────

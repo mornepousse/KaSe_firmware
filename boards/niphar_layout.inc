@@ -1,7 +1,7 @@
 /*
  * Niphargus moitié gauche — physical key layout.
- * 4 rows × 7 cols electrical grid; 3 electrical positions unused (row2/col6,
- * row3/col5, row3/col6) — see boards/niphar_left/board_keymap.c.
+ * 4 rows × 7 cols electrical grid; 2 electrical positions unused (row2/col6,
+ * row3/col6) — see boards/niphar_left/board_keymap.c.
  *
  * Format v2: direct x/y positioning with optional rotation (r) and width (w).
  * Top-level "keys" = individually positioned keys (thumb cluster + the two
@@ -21,7 +21,8 @@ const char board_layout_json[] =
     "{\"row\":3,\"col\":1,\"x\":1.3,\"y\":3.8,\"r\":10.0},"
     "{\"row\":3,\"col\":2,\"x\":2.3,\"y\":3.9,\"w\":1.2},"
     "{\"row\":3,\"col\":3,\"x\":3.6,\"y\":3.9,\"r\":-10.0},"
-    "{\"row\":3,\"col\":4,\"x\":4.6,\"y\":3.7,\"r\":-20.0,\"w\":1.4},"
+    "{\"row\":3,\"col\":4,\"x\":4.6,\"y\":3.7,\"r\":-20.0},"
+    "{\"row\":3,\"col\":5,\"x\":5.6,\"y\":3.8,\"r\":-10.0},"
     "{\"row\":0,\"col\":6,\"x\":6.0,\"y\":0.0},"
     "{\"row\":1,\"col\":6,\"x\":6.0,\"y\":1.0}"
   "],"

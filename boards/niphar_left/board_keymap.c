@@ -19,7 +19,7 @@ uint16_t keymaps[LAYERS][MATRIX_ROWS][MATRIX_COLS] = {
         {K_TAB,   K_Q, K_W, K_E, K_R, K_T, K_LBRC},
         {K_ESC,   K_A, K_S, K_D, K_F, K_G, K_RBRC},
         {K_LSHIFT,K_Z, K_X, K_C, K_V, K_B, XXXXXXX},
-        {K_LCTRL, K_LWIN, K_LALT, MO_L1, K_SPACE, XXXXXXX, XXXXXXX},
+        {K_LCTRL, K_LWIN, K_LALT, MO_L1, K_SPACE, K_ENT, XXXXXXX},
     },
     {   /* 1 — NAV */
         {_______, K_1, K_2, K_3, K_4, K_5, XXXXXXX},
