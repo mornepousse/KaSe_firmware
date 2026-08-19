@@ -89,16 +89,16 @@ if(CONFIG_KASE_HAS_BLE)
     )
 endif()
 
-# NRF24 + ESP-NOW radio stack + HID relay TX — keyboard wireless relay mode only
+# NRF24 radio stack + HID relay TX — keyboard wireless relay mode only.
+# The ESP-NOW config channel that used to ride along was removed with the half
+# firmware; this mode now relays HID over NRF24 only.
 if(CONFIG_KASE_KBD_WIRELESS)
     list(APPEND srcs
         "comm/rf/rf_driver.c"
         "comm/rf/rf_pairing.c"
         "comm/rf/kbd_relay_tx.c"
         "comm/rf/v2d_sleep.c"
-        "comm/usb/usb_presence.c"
-        "comm/espnow/espnow_link.c"
-        "comm/espnow/espnow_info.c")
+        "comm/usb/usb_presence.c")
 endif()
 
 # Dongle CDC stubs (no-op symbols for bt/display referenced by cdc_binary_cmds.c)
@@ -133,11 +133,6 @@ if(CONFIG_KASE_DEVICE_ROLE_DONGLE)
     endif()
 endif()
 
-# CDC stubs for half role (no-op symbols for bt/display/layout)
-if(CONFIG_KASE_DEVICE_ROLE_HALF)
-    list(APPEND srcs "comm/cdc/cdc_half_stubs.c")
-endif()
-
 # RF RX (NRF24) — dongle role only
 if(CONFIG_KASE_HAS_RF_RX)
     list(APPEND srcs
@@ -154,54 +149,14 @@ if(CONFIG_KASE_HAS_RF_RX)
     )
 endif()
 
-# RF TX (NRF24 PTX) + half scan task + shared SPI bus lock — half role only
-if(CONFIG_KASE_HAS_RF_TX)
-    list(APPEND srcs
-        "comm/rf/half_scan_task.c"
-        "comm/rf/half_power.c"
-        "comm/rf/half_battery.c"
-        "comm/rf/half_sleep.c"
-        "periph/half_spi.c"
-    )
-    # rf_driver.c is already in the list when KASE_HAS_RF_RX is also set.
-    # When building half standalone (no RF_RX), add it here.
-    if(NOT CONFIG_KASE_HAS_RF_RX)
-        list(APPEND srcs "comm/rf/rf_driver.c")
-    endif()
-endif()
-
-# Per-set NRF addressing + pairing (Plan RF-1/RF-2) — dongle (RX) and half (TX)
-if(CONFIG_KASE_HAS_RF_RX OR CONFIG_KASE_HAS_RF_TX)
+# Per-set NRF addressing + pairing (Plan RF-1/RF-2) — dongle RX side
+if(CONFIG_KASE_HAS_RF_RX)
     list(APPEND srcs "comm/rf/rf_pairing.c")
 endif()
 
 # NRF line short-circuit bring-up diagnostic — only when explicitly enabled
 if(CONFIG_KASE_NRF_LINE_TEST)
     list(APPEND srcs "comm/rf/rf_line_test.c")
-endif()
-
-# Trackpad IQS5xx skeleton — half role only (compiled on both halves; runtime probe)
-if(CONFIG_KASE_HAS_TRACKPAD)
-    list(APPEND srcs "periph/trackpad/trackpad.c")
-endif()
-
-# E-ink SSD1681 + LVGL monochrome driver — half role only
-if(CONFIG_KASE_HAS_EINK)
-    list(APPEND srcs
-        "periph/eink/eink.c"
-        "periph/eink/eink_lvgl.c"
-        "periph/eink/en_label.c"    # pure formatters, also linked by host tests
-    )
-    list(APPEND priv_requires lvgl)   # raw LVGL v8 — managed component
-endif()
-
-# ESP-NOW info channel — dongle + half roles (KASE_HAS_ESPNOW=y on both)
-if(CONFIG_KASE_HAS_ESPNOW)
-    list(APPEND srcs
-        "comm/espnow/espnow_link.c"
-        "comm/espnow/espnow_info.c"
-    )
-    # Plan 5 will add: EN_OTA_*, EN_CFG_*, EN_TELEM_* handlers in additional .c files.
 endif()
 
 # PRIV_REQUIRES — gate on Kconfig flags
@@ -216,17 +171,12 @@ set(priv_requires
     unity
     esp_driver_i2c
     app_update
-    esp_wifi    # esp_now.h lives in esp_wifi/include; needed when ESPNOW=y.
-                # esp_wifi component always registers (even if WiFi stack disabled)
-                # so listing it unconditionally is safe and avoids CMake conditional issues.
-    esp_event   # esp_event_loop_create_default is called from espnow_link.c
     bt          # BLE HID (keyboard role). MUST be unconditional: with set(COMPONENTS main)
     esp_hid     # a conditional `if(CONFIG_KASE_HAS_BLE)` requires fails to pull bt on a fresh
                 # config (CONFIG unknown on first pass) and nothing else pulls it transitively
                 # → BT_* Kconfig symbols unknown + esp_bt_defs.h missing. Same fix as esp_wifi.
                 # Harmless on dongle/half (BT disabled in their sdkconfig → compiles to ~nothing).
-    esp_driver_tsens  # CPU temperature sensor — fastfetch e-ink dashboard (half)
-    spi_flash         # esp_flash_get_size / esp_partition_* — dashboard flash stats
+    spi_flash         # esp_flash_get_size / esp_partition_*
     mbedtls           # HMAC-SHA1 for OTP HID (cr_hmac.c, dongle only)
 )
 
@@ -238,19 +188,8 @@ if(CONFIG_KASE_HAS_RF_RX)
     list(APPEND priv_requires esp_driver_spi)
 endif()
 
-if(CONFIG_KASE_HAS_RF_TX AND NOT CONFIG_KASE_HAS_RF_RX)
+if(CONFIG_KASE_KBD_WIRELESS AND NOT CONFIG_KASE_HAS_RF_RX)
     list(APPEND priv_requires esp_driver_spi)
-endif()
-
-if(CONFIG_KASE_KBD_WIRELESS AND NOT CONFIG_KASE_HAS_RF_RX AND NOT CONFIG_KASE_HAS_RF_TX)
-    list(APPEND priv_requires esp_driver_spi)
-endif()
-
-# esp_wifi and esp_event are now unconditionally in priv_requires above.
-# This conditional block is kept for documentation/future conditional additions.
-if(CONFIG_KASE_HAS_ESPNOW)
-    # Placeholder: additional ESPNOW-specific priv_requires can be added here.
-    # esp_wifi + esp_event already in base set above.
 endif()
 
 idf_component_register(
@@ -274,8 +213,6 @@ idf_component_register(
         "input"
         "periph"
         "periph/trackpad"
-        "periph/eink"
-        "comm/espnow"
         "${BOARD_DIR}"
     PRIV_REQUIRES ${priv_requires}
 )

@@ -20,14 +20,14 @@ if printf '%s' "$cmd" | grep -qE 'idf\.py\b' \
   block "Build board sans -DSDKCONFIG=build_<board>/sdkconfig → fuite de config entre boards (CLAUDE.md). Utilise: idf.py -B build_<board> -DBOARD=<board> -DSDKCONFIG=build_<board>/sdkconfig build"
 fi
 
-# --- Footgun 2 : erase flash / wipe NVS → tue le pairing espnow (e-ink mort) ---
+# --- Footgun 2 : erase flash / wipe NVS → perte config, keymaps, pairing RF ---
 # CLAUDE.md : « Jamais d'erase NVS sans raison » ; mémoire : erase → re-pairing requis.
 # Exige un VRAI contexte d'invocation (outil de flash présent) + un verbe erase,
 # sinon un simple message de commit / echo contenant "erase_flash" faux-positive.
 if printf '%s' "$cmd" | grep -qE '\b(esptool(\.py)?|parttool(\.py)?|idf\.py)\b' \
    && printf '%s' "$cmd" | grep -qE 'erase[_-]?flash|erase[_-]?region|erase[_-]?partition' \
    && ! printf '%s' "$cmd" | grep -qF 'ALLOW_ERASE'; then
-  block "erase_flash efface la NVS (config, keymaps, bigrams) ET le pairing espnow → l'e-ink meurt, re-pairing requis. Si c'est voulu : ajoute '# ALLOW_ERASE' à la commande, ou lance-la toi-même via ! dans le prompt."
+  block "erase_flash efface la NVS (config, keymaps, bigrams) ET le pairing RF → re-pairing requis. Si c'est voulu : ajoute '# ALLOW_ERASE' à la commande, ou lance-la toi-même via ! dans le prompt."
 fi
 
 exit 0

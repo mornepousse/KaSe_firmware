@@ -22,6 +22,17 @@ Pour cut une release :
 
 Entre deux releases : `cheni vX.Y.Z-N-gHASH-dirty` via `git describe`.
 
+## Périmètre — les halves ont quitté ce dépôt
+
+Les moitiés split (ex-`kase_half_left` / `kase_half_right`, e-ink, ESP-NOW) ont
+été retirées : le clavier split est redessiné sous le nom **Niphargus**
+(`~/Documents/GitHub/rili`, ESP32-S3 + nRF24L01+, Sharp Memory LCD, trackpad
+Azoteq TPS43) et **son firmware vivra dans ce dépôt-là**, pas ici.
+
+Ce qui reste dans KaSe : les claviers monoblocs V1/V2/V2D et le **dongle**, qui
+demeure le récepteur côté hôte — le lien NRF24 et le pairing d'ici restent la
+référence pour le futur firmware Niphargus.
+
 ## Board variants
 
 - **V1** : round SPI display (GC9A01), LED strip, pinout historique
@@ -43,11 +54,11 @@ idf.py -B build_kase_v2_debug -DBOARD=kase_v2_debug -DSDKCONFIG=build_kase_v2_de
 Paramètre CMake : `-DBOARD=<name>` (pas `-DBOARD_VARIANT`). Chaque board a son
 propre dossier build (`build_kase_<name>/`) **et son propre `sdkconfig`** via
 `-DSDKCONFIG=build_kase_<name>/sdkconfig` — c'est ce qui évite la fuite de
-config entre boards (cf. Workflow anti-régression). 6 boards au total : V1, V2,
-V2D, dongle, half_left, half_right. Pour tout vérifier d'un coup :
+config entre boards (cf. Workflow anti-régression). 4 boards au total : V1, V2,
+V2D, dongle. Pour tout vérifier d'un coup :
 `./scripts/check.sh`.
 
-**ccache** : `check.sh` exporte `IDF_CCACHE_ENABLE=1` — les 6 boards partagent
+**ccache** : `check.sh` exporte `IDF_CCACHE_ENABLE=1` — les 4 boards partagent
 la plupart des composants, donc après le 1er board les suivants réutilisent les
 objets compilés (gros gain sur le build full + pre-push). Pour tes builds
 interactifs, ajoute `export IDF_CCACHE_ENABLE=1` à ton shell (ou source-le avant
@@ -116,11 +127,10 @@ main/
 │   ├── status_display.c  # Coordinator
 │   ├── oled/             # I2C OLED (V2/V2D)
 │   └── round/            # SPI GC9A01 (V1)
-├── tama/                 # Virtual pet (OpenCritter sprites)
 └── led/                  # WS2812 strip anim (V1 only)
 
 boards/
-├── kase_v1/   kase_v2/   kase_v2_debug/
+├── kase_v1/   kase_v2/   kase_v2_debug/   kase_dongle/
 └── kase_layout.inc  # Layout JSON shared V2/V2D
 ```
 
@@ -163,7 +173,6 @@ Clés :
 - `leader_cfg`, `leader_cnt`
 - `ko_cfg`, `ko_cnt`
 - `bt_slots`, `bt_active`, `bt_enabled`
-- `tama_stats`, `tama_ver`
 
 **Jamais** d'erase NVS au boot sans raison explicite (safe mode préserve
 les données depuis v3.7.8).
@@ -202,7 +211,7 @@ Source unique de vérité : `scripts/check.sh` (scaffold tripwire v0.10.1 ;
 `--host-only`/`--board` sont des alias conservés de `--fast`/`--variant`).
 - `./scripts/check.sh --host-only` — tests host (~secondes)
 - `./scripts/check.sh --board <name>` — host + build d'un board
-- `./scripts/check.sh` — host + build des 6 boards (sdkconfig isolé par board)
+- `./scripts/check.sh` — host + build des 4 boards (sdkconfig isolé par board)
 - Skip-si-déjà-vert : état inchangé depuis le dernier vert → sortie immédiate ;
   `--force` pour relancer quand même.
 - Sur rouge : le détail de la commande fautive est dans
@@ -282,7 +291,7 @@ secondaire).
 ## Release workflow
 
 1. Bump version via tag git `vX.Y.Z`
-2. `./scripts/check.sh` doit être vert (les 6 boards build)
+2. `./scripts/check.sh` doit être vert (les 4 boards build)
 3. Merge binaries avec `esptool.py merge_bin` pour les `_full.bin`
 4. `glab release create vX.Y.Z <files...>` (app + full)
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tripwire-template: v0.10.1
+# tripwire-template: v0.10.2
 # Tripwire anti-régression KaSe — source unique de vérité du "quoi vérifier".
 # Généré par /tripwire:init. Adapter ICI ; les hooks ne font qu'appeler ce script.
 # Modes:
@@ -28,7 +28,7 @@ cd "$PROJECT_DIR" || exit 1
 export IDF_CCACHE_ENABLE=1
 
 # Variantes de build. Laisser vide pour un projet mono-cible.
-ALL_VARIANTS=(kase_v1 kase_v2 kase_v2_debug kase_dongle kase_half_left kase_half_right)
+ALL_VARIANTS=(kase_v1 kase_v2 kase_v2_debug kase_dongle)
 
 # Modules (monorepo, optionnel) : quand un hook passe --changed <fichier>, la
 # phase rapide est routée sur le premier module dont le glob matche. Sans match
@@ -171,7 +171,7 @@ fi
 if [ -n "$TEST_COUNT_CMD" ]; then
   TC="$( (eval "$TEST_COUNT_CMD") 2>/dev/null | tr -d '[:space:]' )"
   case "$TC" in ''|*[!0-9]*) TC="" ;; esac
-  REF="$(tr -d '[:space:]' < .tripwire-testcount 2>/dev/null)"
+  REF="$(cat .tripwire-testcount 2>/dev/null | tr -d '[:space:]')"
   case "$REF" in ''|*[!0-9]*) REF="" ;; esac
   if [ -n "$TC" ]; then
     if [ -z "$REF" ]; then

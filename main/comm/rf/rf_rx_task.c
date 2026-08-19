@@ -48,8 +48,6 @@ uint8_t rf_signal_q255(bool link_up, uint32_t hb_age_ms, uint8_t link_q)
 #include "keyboard_config.h"
 #include "hid_transport.h"
 #include "cdc_binary_protocol.h"   /* ks_respond, KS_CMD_MATRIX_TEST */
-#include "espnow_link.h"    /* espnow_send() */
-#include "espnow_msg.h"     /* en_status_t, EN_INFO_STATUS */
 #include "nvs.h"            /* nvs_open, nvs_get_blob, nvs_close */
 #include "tusb.h"           /* tud_ready() */
 #include "esp_log.h"
@@ -108,15 +106,9 @@ static hb_half_state_t s_hb_left, s_hb_right;
 static SemaphoreHandle_t s_evt_sem;
 
 /* Last link_q received from each half (PKT_HEARTBEAT.link_q).
- * Read by rf_rx_get_status() → status_push_cb → rf_signal_bars(). */
+ * Read by rf_rx_get_status() → CDC RF_STATUS. */
 static uint8_t s_link_q_left  = 0;
 static uint8_t s_link_q_right = 0;
-
-/* 5 s periodic status push timer handle */
-static esp_timer_handle_t s_status_push_timer = NULL;
-
-/* Forward declaration — defined after rf_rx_start() */
-static void status_push_cb(void *arg);
 
 /* ── Pairing window state (driven inside rf_rx_task) ── */
 static volatile bool s_pairing_mode = false;
@@ -298,12 +290,6 @@ static void rf_rx_apply_paired_config(void)
         rf_driver_set_rx_address(&s_right, raddr);
     }
     ESP_LOGI(TAG, "hot-switch: set_id=0x%04X L ch=%u R ch=%u", set_id, lcfg.channel, rcfg.channel);
-
-    /* Re-register ESP-NOW peers from the freshly-saved NVS pairing (+ re-derive
-     * the WiFi channel if set_id changed). Without this a newly paired half is
-     * not an ESP-NOW peer until a dongle reboot — its e-ink dashboard gets no
-     * status pushes. */
-    espnow_reload_peers();
 }
 
 /* Process the pairing rendezvous on radio L. Returns true while still pairing. */
@@ -468,12 +454,10 @@ bool rf_rx_start(void)
     rf_apply_set_id(&rcfg, set_id, 0x02);   /* right → slot 0x02 */
     s_lcfg = lcfg; s_rcfg = rcfg;           /* keep live config for the radio watchdog */
 
-    /* Load paired half MACs from NVS at boot so status_push_cb (and layer/state
-     * push) can send EN_INFO_STATUS immediately — without waiting for a pairing
-     * session. These were previously only populated in rf_rx_pair_start(), so a
-     * plain reboot left them zeroed and the ESP-NOW status link stayed down
-     * until a re-pairing. s_pair_mac_* is the single source of truth, also
-     * refreshed on each successful pairing. */
+    /* Load paired peer MACs from NVS at boot: rf_rx_pair_start() alone used to
+     * populate them, so a plain reboot left them zeroed until a re-pairing.
+     * s_pair_mac_* is the single source of truth, refreshed on each successful
+     * pairing and reported over CDC (RF_PAIR_LIST). */
     rf_pairing_load_peers_dongle(s_pair_mac_left, s_pair_mac_right, &s_pair_paired_count);
 
     /* Park BOTH CSN HIGH before initialising either radio. The dongle shares
@@ -517,24 +501,6 @@ bool rf_rx_start(void)
     xTaskCreatePinnedToCore(rf_rx_task, "rf_rx", 8192, NULL, 10, NULL, 0);
     ESP_LOGI(TAG, "RF RX started (L=%d R=%d)", s_left.present, s_right.present);
 
-    /* ── 5 s periodic status push to paired halves ───────────────
-     * NB: rf_rx_start() runs just BEFORE espnow_link_init() in main.c, so the
-     * timer is created before ESP-NOW is up — but the first tick fires at +5 s,
-     * by which time espnow_link_init() (synchronous, ms) has completed, so
-     * status_push_cb's espnow_send() is safe. The callback is safe from the
-     * esp_timer task context: no SPI, no portMAX_DELAY mutex (see
-     * status_push_cb comment). */
-    const esp_timer_create_args_t status_args = {
-        .callback = status_push_cb,
-        .name     = "status_push_tick",
-    };
-    if (esp_timer_create(&status_args, &s_status_push_timer) == ESP_OK) {
-        esp_timer_start_periodic(s_status_push_timer, 5 * 1000 * 1000ULL);  /* 5 s in µs */
-        ESP_LOGI(TAG, "status push timer started (5 s period)");
-    } else {
-        ESP_LOGW(TAG, "status push timer create failed -- status push disabled");
-    }
-
     return true;
 }
 
@@ -558,58 +524,6 @@ void rf_rx_copy_peer_macs(uint8_t mac_left[6], uint8_t mac_right[6])
     /* Live copy maintained by this task (loaded at boot, refreshed on pairing). */
     memcpy(mac_left,  s_pair_mac_left,  6);
     memcpy(mac_right, s_pair_mac_right, 6);
-}
-
-/*
- * status_push_cb — periodic esp_timer callback (5 s period).
- *
- * Context: esp_timer task (NOT rf_rx_task).
- * Safe to call: rf_rx_get_status() (no SPI, copies atomically),
- *               espnow_send() (thread-safe per ESP-NOW spec),
- *               tud_ready() (TinyUSB, thread-safe read).
- * Must NOT call: any rf_driver_* (SPI), xSemaphoreTake with portMAX_DELAY.
- */
-static void status_push_cb(void *arg)
-{
-    (void)arg;
-
-    /* Use the live paired-MAC copy maintained by the RX task: loaded from NVS at
-     * boot (rf_pairing_load_peers_dongle) and refreshed on every successful
-     * pairing. A previous one-shot static cache here required a dongle reboot
-     * after re-pairing before the status push would resume — fixed by reading
-     * the live copy each tick. */
-    const uint8_t *mac_left  = s_pair_mac_left;
-    const uint8_t *mac_right = s_pair_mac_right;
-
-    bool has_left  = mac_left[0]  | mac_left[1]  | mac_left[2]  |
-                     mac_left[3]  | mac_left[4]  | mac_left[5];
-    bool has_right = mac_right[0] | mac_right[1] | mac_right[2] |
-                     mac_right[3] | mac_right[4] | mac_right[5];
-
-    if (!has_left && !has_right) {
-        ESP_LOGD(TAG, "status_push_cb: no paired halves -- skip");
-        return;
-    }
-
-    /* Get current RF link diagnostics */
-    rf_link_status_t st;
-    rf_rx_get_status(&st);
-
-    /* Build EN_INFO_STATUS payload */
-    en_status_t msg;
-    msg.sig_left  = rf_signal_q255(st.link_left,  st.hb_age_left_ms,  st.link_q_left);
-    msg.sig_right = rf_signal_q255(st.link_right, st.hb_age_right_ms, st.link_q_right);
-    msg.flags = 0;
-    if (st.link_left)  msg.flags |= (1u << 0);
-    if (st.link_right) msg.flags |= (1u << 1);
-    if (tud_ready())   msg.flags |= (1u << 2);   /* USB active */
-
-    ESP_LOGD(TAG, "status_push: flags=0x%02x sig_l=%u sig_r=%u",
-             msg.flags, msg.sig_left, msg.sig_right);
-
-    /* Unicast to each paired half */
-    if (has_left)  espnow_send(mac_left,  EN_INFO_STATUS, &msg, sizeof(msg));
-    if (has_right) espnow_send(mac_right, EN_INFO_STATUS, &msg, sizeof(msg));
 }
 
 #endif /* TEST_HOST */

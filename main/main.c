@@ -32,16 +32,6 @@
 #include "kbd_relay_tx.h"
 #endif
 
-#if CONFIG_KASE_DEVICE_ROLE_HALF
-#include "half_scan_task.h"
-#endif
-
-#if CONFIG_KASE_HAS_ESPNOW
-#include "espnow_info.h"
-#include "espnow_link.h"
-#include "cfg_bridge.h"   /* cfg_bridge_kbd_worker_start (wireless config tunnel) */
-#endif
-
 #if CONFIG_KASE_HAS_RF_RX
 #include "trackpad.h"
 #endif
@@ -256,14 +246,6 @@ void app_main(void) {
 
 #if CONFIG_KASE_KBD_WIRELESS
   kbd_relay_init();
-#if CONFIG_KASE_HAS_ESPNOW
-  /* Config tunnel: receive KS chunks forwarded by the dongle over ESP-NOW,
-   * dispatch locally, chunk the KR back. Without this the dongle can relay HID
-   * (NRF) but cannot configure this keyboard (keymap/macros/layout JSON). */
-  espnow_info_init();
-  espnow_link_init();
-  cfg_bridge_kbd_worker_start();   /* dispatch forwarded config frames off the recv cb */
-#endif
 #endif
 
   ESP_LOGI(TAG, "Task Matrix init");
@@ -317,25 +299,12 @@ void app_main(void) {
     trackpad_cfg_load();   /* load persisted accel cfg before first trackpad packet */
     if (!rf_rx_start())
       ESP_LOGE(TAG, "RF RX failed to start (no radios?)");
-
-#if CONFIG_KASE_HAS_ESPNOW
-    espnow_info_init();
-    espnow_link_init();   /* ESP-NOW info channel: layer push to halves, battery RX */
-#endif
-  }
-#elif CONFIG_KASE_DEVICE_ROLE_HALF
-  /* --- Half role: reset matrix GPIOs, init NRF PTX, start scan task. --- */
-  ESP_LOGI(TAG, "Half role: starting NRF PTX + matrix scan");
-  if (!safe_mode) {
-    half_scan_task_start();
-  } else {
-    ESP_LOGW(TAG, "Safe mode: skipping half scan task (USB console accessible)");
   }
 #endif /* device role */
 
 #if CONFIG_KASE_DEVICE_ROLE_KEYBOARD
   /* CPU-time logger is a dev diagnostic; runtime stats aren't enabled on the
-   * dongle/half builds (it would just fail every 5s), so keyboard-only. */
+   * dongle build (it would just fail every 5s), so keyboard-only. */
   xTaskCreatePinnedToCore(cpu_time_logger_task, "cpu_time", 4096, NULL, 2, NULL,
                           1);
 #endif

@@ -90,166 +90,25 @@ bool cfg_reasm_add(cfg_reasm_t *st, const uint8_t *chunk,
  * ----------------------------------------------------------------------- */
 
 /* -------------------------------------------------------------------------
- * ESP-NOW networking bridge — firmware only (see cfg_bridge.h).
+ * Networking bridge — removed with the half firmware.
+ *
+ * The config tunnel to a "smart" keyboard rode on ESP-NOW, which went away with
+ * the halves (their firmware now lives in the Niphargus repo). The chunking and
+ * reassembly logic above is pure and host-tested, so it is kept for whatever
+ * transport comes next; only the ESP-NOW plumbing is gone.
+ *
+ * The dongle CDC dispatcher still calls the two predicates below, so they stay
+ * as no-ops: with no transport, every command is handled locally.
  * ----------------------------------------------------------------------- */
 #ifndef TEST_HOST
-
-#if CONFIG_KASE_DEVICE_ROLE_DONGLE || CONFIG_KASE_KBD_WIRELESS
-#include "espnow_link.h"        /* espnow_send() */
-#include "espnow_msg.h"         /* EN_KS_CHUNK / EN_KR_CHUNK */
-#include "esp_log.h"
-
-static const char *TAG_CFG = "cfg_bridge";
-
-/* Chunk `frame` (len bytes) and send each chunk with the given ESP-NOW type. */
-static void cfg_bridge_send_chunked(const uint8_t mac[6], uint8_t en_type,
-                                    const uint8_t *frame, uint16_t len)
-{
-    uint8_t total = cfg_chunk_count(len);
-    if (total == 0) {
-        ESP_LOGW(TAG_CFG, "send: frame_len %u out of range (drop)", len);
-        return;
-    }
-    uint8_t chunk[CFG_CHUNK_HDR + CFG_CHUNK_PAYLOAD];
-    for (uint8_t idx = 0; idx < total; idx++) {
-        uint16_t clen = cfg_chunk_make(frame, len, idx, chunk);
-        if (clen == 0) {
-            ESP_LOGW(TAG_CFG, "send: chunk %u build failed (abort)", idx);
-            return;
-        }
-        /* Flow-controlled: wait for the previous chunk's TX before queuing the
-         * next, else a burst (e.g. ~23 chunks for the 4.5KB layout JSON) overflows
-         * the WiFi TX ring and the tail is dropped. payload = [idx][total][slice]. */
-        if (!espnow_send_blocking(mac, en_type, chunk, clen, 200)) {
-            ESP_LOGW(TAG_CFG, "send: chunk %u TX failed (abort frame)", idx);
-            return;
-        }
-    }
-}
-#endif /* DONGLE || KBD_WIRELESS */
-
 #if CONFIG_KASE_DEVICE_ROLE_DONGLE
-#include "rf_rx_task.h"         /* rf_rx_copy_peer_macs() */
-#include "cdc_acm_com.h"        /* cdc_send_binary() */
-#include <string.h>
-
-/* Resolve the smart keyboard's MAC.
- * TODO(HW): slot/device-type per-pairing storage is not wired yet, so we target
- * the LEFT paired slot as the smart keyboard. Finalize device-type selection at
- * HW integration time (a smart V2D keyboard pairs into one slot). */
-static bool cfg_bridge_smart_kbd_mac(uint8_t out_mac[6])
-{
-    uint8_t mac_left[6]  = {0};
-    uint8_t mac_right[6] = {0};
-    rf_rx_copy_peer_macs(mac_left, mac_right);
-    bool has_left = mac_left[0] | mac_left[1] | mac_left[2] |
-                    mac_left[3] | mac_left[4] | mac_left[5];
-    if (!has_left) return false;
-    memcpy(out_mac, mac_left, 6);
-    return true;
-}
-
-bool cfg_bridge_have_smart_kbd(void)
-{
-    uint8_t mac[6];
-    return cfg_bridge_smart_kbd_mac(mac);
-}
+bool cfg_bridge_have_smart_kbd(void) { return false; }
 
 void cfg_bridge_forward_frame(const uint8_t *frame, uint16_t len)
 {
-    uint8_t mac[6];
-    if (!cfg_bridge_smart_kbd_mac(mac)) {
-        ESP_LOGW(TAG_CFG, "forward: no smart keyboard paired (drop)");
-        return;
-    }
-    cfg_bridge_send_chunked(mac, EN_KS_CHUNK, frame, len);
-}
-
-void cfg_bridge_recv_kr_chunk(const uint8_t mac[6],
-                              const uint8_t *chunk, uint16_t chunk_len)
-{
-    (void)mac;
-    static cfg_reasm_t s_kr_reasm;   /* dongle: reassemble KR from keyboard */
-    uint16_t out_len = 0;
-    if (cfg_reasm_add(&s_kr_reasm, chunk, chunk_len, &out_len)) {
-        /* Full KR frame reassembled — write it out USB CDC. */
-        cdc_send_binary(s_kr_reasm.buf, out_len);
-        memset(&s_kr_reasm, 0, sizeof(s_kr_reasm));
-    }
+    (void)frame; (void)len;
 }
 #endif /* CONFIG_KASE_DEVICE_ROLE_DONGLE */
-
-#if CONFIG_KASE_KBD_WIRELESS
-#include "cdc_binary_protocol.h"   /* ks_dispatch_frame, ks_resp_redirect_* */
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
-#include <string.h>
-
-/* A complete KS frame is dispatched + answered on a WORKER task, never in the
- * ESP-NOW recv callback: the reply goes out via espnow_send_blocking() (waits on
- * the send callback) and blocking inside the WiFi recv callback would deadlock.
- * The controller is strictly request→response, so one in-flight frame is enough. */
-static uint8_t          s_worker_frame[CFG_FRAME_MAX];
-static uint16_t         s_worker_len;
-static uint8_t          s_worker_mac[6];
-static volatile bool    s_worker_busy;
-static SemaphoreHandle_t s_worker_ready;
-
-void cfg_bridge_handle_ks_frame(const uint8_t mac[6],
-                                const uint8_t *frame, uint16_t len)
-{
-    /* Dispatch with the KR response captured into the redirect buffer, then
-     * chunk it back to the dongle over ESP-NOW. */
-    ks_resp_redirect_begin();
-    ks_dispatch_frame(frame, len);
-    uint16_t resp_len = 0;
-    const uint8_t *resp = ks_resp_redirect_end(&resp_len);
-    if (resp_len > 0) {
-        cfg_bridge_send_chunked(mac, EN_KR_CHUNK, resp, resp_len);
-    }
-}
-
-static void cfg_worker_task(void *arg)
-{
-    (void)arg;
-    for (;;) {
-        if (xSemaphoreTake(s_worker_ready, portMAX_DELAY) != pdTRUE) continue;
-        cfg_bridge_handle_ks_frame(s_worker_mac, s_worker_frame, s_worker_len);
-        s_worker_busy = false;   /* ready for the next frame */
-    }
-}
-
-void cfg_bridge_kbd_worker_start(void)
-{
-    if (s_worker_ready) return;   /* idempotent */
-    s_worker_ready = xSemaphoreCreateBinary();
-    /* 6KB stack: dispatch can build large responses (layout JSON) on the redirect
-     * buffer (static) but handlers still use some stack. */
-    xTaskCreate(cfg_worker_task, "cfg_worker", 6144, NULL, 4, NULL);
-}
-
-void cfg_bridge_recv_ks_chunk(const uint8_t mac[6],
-                              const uint8_t *chunk, uint16_t chunk_len)
-{
-    static cfg_reasm_t s_ks_reasm;   /* keyboard: reassemble KS from dongle */
-    uint16_t out_len = 0;
-    if (cfg_reasm_add(&s_ks_reasm, chunk, chunk_len, &out_len)) {
-        /* Hand the complete frame to the worker (copy out so reasm can be reused).
-         * Drop if the worker is still busy with the previous request (the
-         * controller serializes, so this should not happen in practice). */
-        if (s_worker_ready && !s_worker_busy && out_len <= sizeof(s_worker_frame)) {
-            memcpy(s_worker_frame, s_ks_reasm.buf, out_len);
-            memcpy(s_worker_mac, mac, 6);
-            s_worker_len = out_len;
-            s_worker_busy = true;
-            xSemaphoreGive(s_worker_ready);
-        }
-        memset(&s_ks_reasm, 0, sizeof(s_ks_reasm));
-    }
-}
-#endif /* CONFIG_KASE_KBD_WIRELESS */
-
 #endif /* !TEST_HOST */
 
 bool cfg_is_dongle_local(uint8_t cmd_id)
