@@ -140,6 +140,11 @@ if(CONFIG_KASE_DEVICE_ROLE_DONGLE)
     endif()
 endif()
 
+# Bouchons CDC du rôle esclave Niphargus (pas de display, pas de BLE)
+if(CONFIG_KASE_DEVICE_ROLE_NIPHAR_SLAVE)
+    list(APPEND srcs "comm/cdc/cdc_niphar_slave_stubs.c")
+endif()
+
 # RF RX (NRF24) — dongle role only
 if(CONFIG_KASE_HAS_RF_RX)
     list(APPEND srcs

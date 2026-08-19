@@ -5,14 +5,20 @@ choice KASE_DEVICE_ROLE
     default KASE_DEVICE_ROLE_KEYBOARD
     help
         Selects the type of device this firmware runs on.
-        KEYBOARD = standalone keyboard with local matrix (V1, V2, V2D).
-        DONGLE   = USB receiver dongle for split wireless setup.
+        KEYBOARD     = standalone keyboard with local matrix (V1, V2, V2D).
+        DONGLE       = USB receiver dongle for split wireless setup.
+        NIPHAR_SLAVE = Niphargus right half: local matrix + Sharp LCD, no
+                        keymap engine, no HID output (see KASE_NIPHAR_MASTER
+                        for the left/master half, which reuses KEYBOARD).
 
 config KASE_DEVICE_ROLE_KEYBOARD
     bool "Keyboard (V1/V2/V2D)"
 
 config KASE_DEVICE_ROLE_DONGLE
     bool "Dongle (RX from halves)"
+
+config KASE_DEVICE_ROLE_NIPHAR_SLAVE
+    bool "Niphargus right half (slave: matrix + Sharp LCD, no keymap engine)"
 
 endchoice
 

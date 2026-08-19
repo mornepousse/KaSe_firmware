@@ -1,0 +1,13 @@
+CONFIG_KASE_DEVICE_ROLE_NIPHAR_SLAVE=y
+
+# Pas de BLE : le budget d'alimentation l'interdit (HT7833, pics radio hors
+# budget). La config et les mises à jour passent par USB.
+CONFIG_KASE_HAS_BLE=n
+
+# La droite n'a pas d'USB utile en production (charge seulement, pas de HID) :
+# une console au connecteur de prog est précieuse au bring-up.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"

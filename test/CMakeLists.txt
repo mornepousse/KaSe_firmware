@@ -65,6 +65,7 @@ add_executable(test_runner
     test_oled_nav.c
     ../main/display/oled/oled_nav.c
     test_niphar_left_pins.c
+    test_niphar_right_pins.c
     test_hid_dedup.c
     test_oled_stats.c
     ../main/display/oled/oled_stats.c
