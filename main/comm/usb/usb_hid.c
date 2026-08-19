@@ -364,6 +364,19 @@ void tinyusb_hid_init(void)
     ESP_LOGI(TAG_UD, "USB initialization DONE");
 }
 
+/* On a keypress: if the USB host is suspended (PC asleep, cable still in),
+ * signal a resume so the keypress wakes the PC. No-op when the host is awake or
+ * did not enable remote wakeup. The config descriptor advertises REMOTE_WAKEUP
+ * (see TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP above).
+ *
+ * This lives here, not in usb_presence.c, because usb_presence.c is only
+ * compiled for the wireless-relay build (CONFIG_KASE_KBD_WIRELESS) — which is
+ * how a wired V2D silently lost the feature and stopped waking the PC. */
+void usb_try_remote_wakeup(void)
+{
+    if (tud_mounted() && tud_suspended()) tud_remote_wakeup();
+}
+
 void kase_tinyusb_init(void)
 {
 #if CONFIG_KASE_SEC_OPENPGP

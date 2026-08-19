@@ -12,6 +12,7 @@
 #include "key_features.h"
 #include "keymap.h"
 #include "hid_transport.h"
+#include "usb_hid.h"        /* usb_try_remote_wakeup */
 #if CONFIG_KASE_KBD_WIRELESS
 #include "v2d_sleep.h"
 #include "usb_presence.h"   /* kbd_active_route */
@@ -114,12 +115,11 @@ void vTaskKeyboard(void *pvParameters)
 
         /* Matrix changed → full processing cycle */
         if (stat_matrix_changed == 1) {
-#if CONFIG_KASE_KBD_WIRELESS
             /* A keypress while the USB host is suspended (PC asleep, cable in) →
-             * remote-wakeup so the key wakes the PC (even though the route may have
-             * flipped to RF on suspend). No-op when not suspended. */
+             * remote-wakeup so the key wakes the PC. Not gated on KBD_WIRELESS:
+             * a wired keyboard is precisely the case where the user expects a
+             * keypress to wake the machine. No-op when not suspended. */
             usb_try_remote_wakeup();
-#endif
             build_keycode_report();
             stat_matrix_changed = 0;
             process_matrix_changes();
