@@ -46,8 +46,6 @@
 
 static const char *TAG = "Main";
 
-static int display_sleep = 0; // 0 = on, 1 = off
-
 /* Task handle exported for diagnostics: status display task */
 TaskHandle_t status_display_task_handle = NULL;
 
@@ -70,6 +68,7 @@ static void cpu_time_logger_task(void *arg) {
 // Task handling status display updates, sleep/wake and layer change handling.
 static uint8_t last_displayed_layer =
     255; // Track what layer is currently shown
+static int display_sleep = 0; // 0 = on, 1 = off
 
 static void status_display_task(void *arg) {
   (void)arg;
