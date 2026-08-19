@@ -222,6 +222,7 @@ idf_component_register(
         "comm/cdc"
         "comm/ble"
         "comm/rf"
+        "comm/link"
         "input"
         "periph"
         "periph/trackpad"

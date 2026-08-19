@@ -69,6 +69,7 @@ add_executable(test_runner
     test_hid_dedup.c
     test_oled_stats.c
     ../main/display/oled/oled_stats.c
+    test_link_frame.c
     test_main.c
 )
 
@@ -77,6 +78,7 @@ target_include_directories(test_runner PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../boards/kase_v2_debug
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/periph/trackpad
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/comm/rf
+    ${CMAKE_CURRENT_SOURCE_DIR}/../main/comm/link
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/input
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/comm/ble
     ${CMAKE_CURRENT_SOURCE_DIR}/../main/led

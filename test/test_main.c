@@ -44,6 +44,7 @@ extern void test_niphar_left_pins(void);
 extern void test_niphar_right_pins(void);
 extern void test_hid_dedup(void);
 extern void test_oled_stats(void);
+extern void test_link_frame(void);
 
 int main(void) {
     printf("KeSp Firmware Unit Tests\n");
@@ -87,6 +88,7 @@ int main(void) {
     test_niphar_right_pins();
     test_hid_dedup();
     test_oled_stats();
+    test_link_frame();
 
     printf("\n========================================\n");
     printf("Results: %d passed, %d failed\n", _test_pass_count, _test_fail_count);
