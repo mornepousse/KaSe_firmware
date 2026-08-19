@@ -43,6 +43,8 @@ config KASE_HAS_DISPLAY
 
 config KASE_HAS_BLE
     bool
+    default n if KASE_NIPHAR_MASTER
+    default n if KASE_DEVICE_ROLE_NIPHAR_SLAVE
     default y if KASE_DEVICE_ROLE_KEYBOARD && !KASE_KBD_WIRELESS
     default n
     help
@@ -50,6 +52,12 @@ config KASE_HAS_BLE
         mode (KASE_KBD_WIRELESS): a smart keyboard reaches the host through the
         M.2 dongle over USB, so its own BLE radio is redundant — and dropping it
         frees ~80KB heap and removes its 2.4GHz activity near the NRF relay.
+        Also disabled on both Niphargus halves (KASE_NIPHAR_MASTER,
+        KASE_DEVICE_ROLE_NIPHAR_SLAVE): the power budget (HT7833, radio peaks)
+        does not allow for it — config and updates go over USB. Both `default`
+        lines above must stay before the KEYBOARD-role default: Kconfig honors
+        the first satisfied `default` in source order, same mechanism as
+        KASE_HAS_DISPLAY above.
 
 config KASE_KBD_WIRELESS
     bool "Keyboard talks to the M.2 dongle wirelessly (NRF HID + ESP-NOW config)"

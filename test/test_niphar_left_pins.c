@@ -43,12 +43,45 @@
 
 #include "../boards/niphar_left/board.h"
 
+/* Garde de compilation : la gauche n'a AUCUN écran (connecteur J12 non
+ * peuplé, cf. docs/NIPHARGUS_V2_HARDWARE.md). main/CMakeLists.txt:30-35 lit
+ * le TEXTE de board.h pour choisir le backend d'affichage (round/OLED) — une
+ * macro BOARD_DISPLAY_* égarée ici changerait le build sans qu'aucun test
+ * bronche. On fait planter la compilation plutôt que de laisser une macro
+ * fantôme décrire un écran qui n'existe pas. */
+#ifdef BOARD_LCD_CS_GPIO
+#error "la gauche n'a pas d'écran (J12 non peuplé) : BOARD_LCD_CS_GPIO n'a rien à faire dans boards/niphar_left/board.h"
+#endif
+#ifdef BOARD_DISPLAY_BACKEND_ROUND
+#error "la gauche n'a pas d'écran : BOARD_DISPLAY_BACKEND_ROUND changerait le backend choisi par CMakeLists.txt"
+#endif
+#ifdef BOARD_DISPLAY_BACKEND_OLED
+#error "la gauche n'a pas d'écran : BOARD_DISPLAY_BACKEND_OLED changerait le backend choisi par CMakeLists.txt"
+#endif
+#ifdef BOARD_DISPLAY_WIDTH
+#error "la gauche n'a pas d'écran : BOARD_DISPLAY_WIDTH n'a rien à faire dans boards/niphar_left/board.h"
+#endif
+#ifdef BOARD_DISPLAY_HEIGHT
+#error "la gauche n'a pas d'écran : BOARD_DISPLAY_HEIGHT n'a rien à faire dans boards/niphar_left/board.h"
+#endif
+
 /* GPIO non câblés : strapping et PSRAM octale. Aucun pin du board ne doit
  * tomber dedans. */
 static int is_forbidden(int gpio)
 {
     return gpio == 3 || gpio == 45 || gpio == 46 ||
            gpio == 35 || gpio == 36 || gpio == 37;
+}
+
+/* GPIO déjà engagés à autre chose que la matrice/périphériques du board :
+ * USB D-/D+ (19/20, NIPHARGUS_V2_HARDWARE.md:41) et le connecteur de prog
+ * (0, 43, 44, :47). La gauche existe POUR l'USB — une colonne posée sur
+ * GPIO19 passerait test_left_no_forbidden_gpio (pas dans la liste des non
+ * câblés) sans ce second contrôle. */
+static int is_reserved(int gpio)
+{
+    return gpio == 19 || gpio == 20 ||
+           gpio == 0 || gpio == 43 || gpio == 44;
 }
 
 static void test_left_matrix_table(void)
@@ -111,17 +144,43 @@ static void test_left_no_forbidden_gpio(void)
         TEST_ASSERT(!is_forbidden(pins[i]), "aucun pin sur un GPIO non câblé");
 }
 
-static void test_left_no_pin_used_twice(void)
+static void test_left_no_reserved_gpio(void)
 {
-    /* Une permutation ratée produit typiquement un doublon. */
+    /* USB D-/D+ et connecteur de prog : engagés ailleurs, pas dans la liste
+     * des non-câblés donc invisibles à test_left_no_forbidden_gpio. */
     const int pins[] = {
         ROWS0, ROWS1, ROWS2, ROWS3,
         COLS0, COLS1, COLS2, COLS3, COLS4, COLS5, COLS6,
+        BOARD_NRF_SCK, BOARD_NRF_MISO, BOARD_NRF_MOSI,
+        BOARD_NRF_CE, BOARD_NRF_CSN, BOARD_NRF_IRQ,
+        BOARD_LINK_TX, BOARD_LINK_RX, BOARD_LINK_5V_EN,
+        BOARD_VBAT_SENSE_GPIO,
+        BOARD_TRACK_SDA_GPIO, BOARD_TRACK_SCL_GPIO, BOARD_TRACK_RDY_GPIO,
+    };
+    for (unsigned i = 0; i < sizeof(pins) / sizeof(pins[0]); i++)
+        TEST_ASSERT(!is_reserved(pins[i]), "aucun pin sur l'USB natif ou le connecteur de prog");
+}
+
+static void test_left_no_pin_used_twice(void)
+{
+    /* Une permutation ratée produit typiquement un doublon — sur TOUS les
+     * pins du board (matrice + SPI + nRF + lien + jauge + trackpad), pas
+     * seulement la matrice : à droite, COLS6/ROWS0 sont à un chiffre des
+     * numéros de radio, une faute de frappe qui poserait BOARD_NRF_CE sur un
+     * pin matrice ne serait pas vue si on ne regardait que la matrice. */
+    const int pins[] = {
+        ROWS0, ROWS1, ROWS2, ROWS3,
+        COLS0, COLS1, COLS2, COLS3, COLS4, COLS5, COLS6,
+        BOARD_NRF_SCK, BOARD_NRF_MISO, BOARD_NRF_MOSI,
+        BOARD_NRF_CE, BOARD_NRF_CSN, BOARD_NRF_IRQ,
+        BOARD_LINK_TX, BOARD_LINK_RX, BOARD_LINK_5V_EN,
+        BOARD_VBAT_SENSE_GPIO,
+        BOARD_TRACK_SDA_GPIO, BOARD_TRACK_SCL_GPIO, BOARD_TRACK_RDY_GPIO,
     };
     const unsigned n = sizeof(pins) / sizeof(pins[0]);
     for (unsigned i = 0; i < n; i++)
         for (unsigned j = i + 1; j < n; j++)
-            TEST_ASSERT(pins[i] != pins[j], "aucun GPIO matrice en double");
+            TEST_ASSERT(pins[i] != pins[j], "aucun GPIO en double sur tout le board");
 }
 
 static void test_left_swaps_the_link_uart(void)
@@ -139,6 +198,7 @@ void test_niphar_left_pins(void)
     test_left_matrix_geometry();
     test_left_peripheral_pins();
     test_left_no_forbidden_gpio();
+    test_left_no_reserved_gpio();
     test_left_no_pin_used_twice();
     test_left_swaps_the_link_uart();
 }

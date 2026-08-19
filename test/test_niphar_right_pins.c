@@ -43,6 +43,15 @@
 
 #include "../boards/niphar_right/board.h"
 
+/* Garde de compilation : le trackpad est GAUCHE uniquement (Azoteq TPS43,
+ * I2C + RDY, cf. docs/NIPHARGUS_V2_HARDWARE.md). Une macro
+ * BOARD_HAS_TRACKPAD_LOCAL égarée ici décrirait un périphérique qui n'existe
+ * pas sur cette moitié — on fait planter la compilation plutôt que de
+ * laisser passer silencieusement. */
+#ifdef BOARD_HAS_TRACKPAD_LOCAL
+#error "le trackpad est sur la gauche uniquement : BOARD_HAS_TRACKPAD_LOCAL n'a rien à faire dans boards/niphar_right/board.h"
+#endif
+
 /* GPIO non câblés : strapping et PSRAM octale. Aucun pin du board ne doit
  * tomber dedans. */
 static int is_forbidden(int gpio)
@@ -51,10 +60,23 @@ static int is_forbidden(int gpio)
            gpio == 35 || gpio == 36 || gpio == 37;
 }
 
+/* GPIO déjà engagés à autre chose que la matrice/périphériques du board :
+ * USB D-/D+ (19/20, NIPHARGUS_V2_HARDWARE.md:41) et le connecteur de prog
+ * (0, 43, 44, :47). COLS6 = GPIO1 et ROWS0 = GPIO2 étant déjà à un chiffre
+ * des numéros de radio, un second contrôle ici couvre les pins engagés que
+ * test_right_no_forbidden_gpio ne voit pas (pas dans la liste des non
+ * câblés). */
+static int is_reserved(int gpio)
+{
+    return gpio == 19 || gpio == 20 ||
+           gpio == 0 || gpio == 43 || gpio == 44;
+}
+
 static void test_right_matrix_table(void)
 {
     /* Table DROITE du contrat — différente de la gauche, ce n'est PAS une
-     * symétrie : row1/row2/row3 et col4/col5/col6 sont permutés. */
+     * symétrie : sur les 11 pins de la matrice, une seule coïncide entre
+     * les deux moitiés (col3 = GPIO9) ; les 10 autres diffèrent. */
     TEST_ASSERT_EQ(ROWS0, 2,  "droite row0 = GPIO2");
     TEST_ASSERT_EQ(ROWS1, 12, "droite row1 = GPIO12");
     TEST_ASSERT_EQ(ROWS2, 4,  "droite row2 = GPIO4");
@@ -116,17 +138,44 @@ static void test_right_no_forbidden_gpio(void)
         TEST_ASSERT(!is_forbidden(pins[i]), "aucun pin sur un GPIO non câblé");
 }
 
-static void test_right_no_pin_used_twice(void)
+static void test_right_no_reserved_gpio(void)
 {
-    /* Une permutation ratée produit typiquement un doublon. */
+    /* USB D-/D+ et connecteur de prog : engagés ailleurs, pas dans la liste
+     * des non-câblés donc invisibles à test_right_no_forbidden_gpio. */
     const int pins[] = {
         ROWS0, ROWS1, ROWS2, ROWS3,
         COLS0, COLS1, COLS2, COLS3, COLS4, COLS5, COLS6,
+        BOARD_NRF_SCK, BOARD_NRF_MISO, BOARD_NRF_MOSI,
+        BOARD_NRF_CE, BOARD_NRF_CSN, BOARD_NRF_IRQ,
+        BOARD_LINK_TX, BOARD_LINK_RX, BOARD_LINK_5V_EN,
+        BOARD_VBAT_SENSE_GPIO,
+        BOARD_LCD_CS_GPIO,
+    };
+    for (unsigned i = 0; i < sizeof(pins) / sizeof(pins[0]); i++)
+        TEST_ASSERT(!is_reserved(pins[i]), "aucun pin sur l'USB natif ou le connecteur de prog");
+}
+
+static void test_right_no_pin_used_twice(void)
+{
+    /* Une permutation ratée produit typiquement un doublon — sur TOUS les
+     * pins du board (matrice + SPI + nRF + lien + jauge + écran), pas
+     * seulement la matrice : COLS6 = GPIO1 et ROWS0 = GPIO2 sont à un
+     * chiffre des numéros de radio (CE=15/CSN=16), une faute de frappe qui
+     * poserait BOARD_NRF_CE sur GPIO12 ne serait pas vue si on ne regardait
+     * que la matrice. */
+    const int pins[] = {
+        ROWS0, ROWS1, ROWS2, ROWS3,
+        COLS0, COLS1, COLS2, COLS3, COLS4, COLS5, COLS6,
+        BOARD_NRF_SCK, BOARD_NRF_MISO, BOARD_NRF_MOSI,
+        BOARD_NRF_CE, BOARD_NRF_CSN, BOARD_NRF_IRQ,
+        BOARD_LINK_TX, BOARD_LINK_RX, BOARD_LINK_5V_EN,
+        BOARD_VBAT_SENSE_GPIO,
+        BOARD_LCD_CS_GPIO,
     };
     const unsigned n = sizeof(pins) / sizeof(pins[0]);
     for (unsigned i = 0; i < n; i++)
         for (unsigned j = i + 1; j < n; j++)
-            TEST_ASSERT(pins[i] != pins[j], "aucun GPIO matrice en double");
+            TEST_ASSERT(pins[i] != pins[j], "aucun GPIO en double sur tout le board");
 }
 
 static void test_right_does_not_swap_the_link_uart(void)
@@ -144,6 +193,7 @@ void test_niphar_right_pins(void)
     test_right_peripheral_pins();
     test_right_display_pins();
     test_right_no_forbidden_gpio();
+    test_right_no_reserved_gpio();
     test_right_no_pin_used_twice();
     test_right_does_not_swap_the_link_uart();
 }

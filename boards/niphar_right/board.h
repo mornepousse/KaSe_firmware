@@ -23,8 +23,10 @@
 
 /* ── Matrice : COL → switch → diode → ROW ──────────────────────
  * Le scan PILOTE les colonnes et LIT les rows (BOARD_MATRIX_COL2ROW).
- * Table DROITE — PAS un miroir de la gauche : row1/row2/row3 et
- * col4/col5/col6 sont permutés par le routage du PCB. */
+ * Table DROITE — PAS un miroir de la gauche : sur les 11 pins de la
+ * matrice, une seule coïncide entre les deux moitiés (col3 = GPIO9,
+ * routage commun) ; les 10 autres (row0..row3, col0..col2, col4..col6)
+ * diffèrent. Ne jamais recopier l'une depuis l'autre. */
 #define ROWS0  GPIO_NUM_2
 #define ROWS1  GPIO_NUM_12
 #define ROWS2  GPIO_NUM_4
