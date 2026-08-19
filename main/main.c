@@ -20,7 +20,9 @@
 #include <stdint.h>
 
 #if CONFIG_KASE_DEVICE_ROLE_KEYBOARD
+#if CONFIG_KASE_HAS_DISPLAY
 #include "display_backend.h"
+#endif
 #include "hid_bluetooth_manager.h"   /* real API, or no-op stubs when HAS_BLE off */
 #include "keyboard_task.h"
 #include "led_strip_anim.h"
@@ -64,7 +66,7 @@ static void cpu_time_logger_task(void *arg) {
 }
 #endif
 
-#if CONFIG_KASE_DEVICE_ROLE_KEYBOARD
+#if CONFIG_KASE_HAS_DISPLAY
 // Task handling status display updates, sleep/wake and layer change handling.
 static uint8_t last_displayed_layer =
     255; // Track what layer is currently shown
@@ -118,7 +120,7 @@ static void status_display_task(void *arg) {
         100)); // 100ms polling — fast enough for UI, no keyboard lag
   }
 }
-#endif /* CONFIG_KASE_DEVICE_ROLE_KEYBOARD */
+#endif /* CONFIG_KASE_HAS_DISPLAY */
 
 /* Boot crash detection: RTC memory survives soft reboot but not power cycle */
 static RTC_NOINIT_ATTR uint32_t boot_crash_count;
@@ -216,6 +218,7 @@ void app_main(void) {
 
 #if CONFIG_KASE_DEVICE_ROLE_KEYBOARD
   /* --- Keyboard-only init: display, matrix, BLE, LED strip --- */
+#if CONFIG_KASE_HAS_DISPLAY
   if (!safe_mode) {
     ESP_LOGI(TAG, "display init");
 #if !SKIP_STATUS_DISPLAY
@@ -236,6 +239,7 @@ void app_main(void) {
   } else {
     ESP_LOGW(TAG, "Safe mode: skipping display");
   }
+#endif /* CONFIG_KASE_HAS_DISPLAY */
 
   rtc_matrix_deinit();
   ESP_LOGI(TAG, "Matrix setup init");
