@@ -49,6 +49,17 @@ config KASE_KBD_WIRELESS
       over NRF24 and exchanges config over ESP-NOW, instead of acting as its own
       USB device. Wired keyboards (V1/V2) leave this off.
 
+config KASE_NIPHAR_MASTER
+    bool "Niphargus: this board is the LEFT half (master)"
+    default n
+    depends on KASE_DEVICE_ROLE_KEYBOARD
+    help
+      Moitié gauche du Niphargus. Elle réutilise le rôle KEYBOARD (matrice
+      locale, moteur keymap, USB HID, CDC binaire) et y ajoute ce qui est propre
+      au split : réception de la matrice de la moitié droite (lien TRRS en
+      filaire, nRF24 en sans-fil) et émission du rapport HID final vers le
+      dongle. C'est la seule moitié qui porte un moteur keymap.
+
 config KASE_VBUS_SENSE
     bool "Use a VBUS-sense GPIO for the USB-first auto-switch"
     default n

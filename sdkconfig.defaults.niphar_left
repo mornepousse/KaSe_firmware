@@ -1,0 +1,10 @@
+CONFIG_KASE_DEVICE_ROLE_KEYBOARD=y
+CONFIG_KASE_NIPHAR_MASTER=y
+
+# Pas de BLE : le budget d'alimentation l'interdit (HT7833, pics radio hors
+# budget). La config et les mises à jour passent par USB.
+CONFIG_KASE_HAS_BLE=n
+
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
