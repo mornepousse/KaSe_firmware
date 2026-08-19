@@ -22,16 +22,24 @@ Pour cut une release :
 
 Entre deux releases : `cheni vX.Y.Z-N-gHASH-dirty` via `git describe`.
 
-## Périmètre — les halves ont quitté ce dépôt
+## Périmètre — anciennes halves retirées, Niphargus à venir
 
-Les moitiés split (ex-`kase_half_left` / `kase_half_right`, e-ink, ESP-NOW) ont
-été retirées : le clavier split est redessiné sous le nom **Niphargus**
-(`~/Documents/GitHub/rili`, ESP32-S3 + nRF24L01+, Sharp Memory LCD, trackpad
-Azoteq TPS43) et **son firmware vivra dans ce dépôt-là**, pas ici.
+Les moitiés split de première génération (`kase_half_left` / `kase_half_right`,
+e-ink SSD1681, ESP-NOW) ont été retirées au commit `c107df77` : elles visaient un
+matériel qui n'existe plus.
 
-Ce qui reste dans KaSe : les claviers monoblocs V1/V2/V2D et le **dongle**, qui
-demeure le récepteur côté hôte — le lien NRF24 et le pairing d'ici restent la
-référence pour le futur firmware Niphargus.
+Le clavier split est redessiné sous le nom **Niphargus** — matériel dans
+`~/Documents/GitHub/rili` (KiCad), **firmware ici**. Deux moitiés ESP32-S3 +
+nRF24L01+, matrice 4×7, trackpad Azoteq TPS43 à gauche, Sharp Memory LCD à
+droite, lien filaire TRRS. Pas de WiFi ni de BLE : config et mises à jour par USB.
+
+Architecture actée : la **moitié gauche est le maître en toutes circonstances**
+(elle porte le seul moteur keymap et le trackpad) ; la droite est un scanner. Le
+dongle garde sa radio 1 pour le clavier — la radio 2 appartient à la souris
+**Conchodytes** (`~/Documents/GitHub/Conchodytes`).
+
+Design complet : `docs/superpowers/specs/2026-08-19-niphargus-firmware-design.md`.
+Brochage : `docs/NIPHARGUS_V2_HARDWARE.md` (source de vérité, vérifié à la netlist).
 
 ## Board variants
 
