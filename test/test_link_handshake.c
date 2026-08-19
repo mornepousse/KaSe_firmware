@@ -107,10 +107,18 @@ static void test_usb_gone_already_dead_from_idle(void)
 static void test_usb_gone_already_dead_from_probing(void)
 {
     /* Même chose depuis PROBING : la sonde est partie mais le 5 V n'est pas
-     * encore levé, donc USB_GONE ne doit pas prétendre l'avoir coupé. */
+     * encore levé, donc USB_GONE ne doit pas prétendre l'avoir coupé.
+     *
+     * Précondition vérifiée explicitement : sans elle, ce test passerait
+     * identiquement contre un stub où USB_PRESENT ne ferait rien (la machine
+     * resterait en IDLE) — l'état final (IDLE, 5 V mort) serait le même sans
+     * être jamais passé par PROBING, et le nom du test mentirait. */
     link_hs_t hs;
     link_hs_init(&hs);
-    link_hs_step(&hs, LINK_HS_EV_USB_PRESENT, 0);
+    link_hs_action_t a0 = link_hs_step(&hs, LINK_HS_EV_USB_PRESENT, 0);
+    TEST_ASSERT_EQ(a0, LINK_HS_ACT_SEND_PROBE, "présence USB → sonder");
+    TEST_ASSERT_EQ(hs.state, LINK_HS_PROBING, "en sonde avant USB_GONE");
+
     link_hs_action_t a = link_hs_step(&hs, LINK_HS_EV_USB_GONE, 10);
     TEST_ASSERT_EQ(a, LINK_HS_ACT_NONE, "5 V déjà mort en PROBING → pas de DISABLE_5V");
     TEST_ASSERT_EQ(hs.state, LINK_HS_IDLE, "retour au repos");
