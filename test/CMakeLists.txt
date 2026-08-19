@@ -70,6 +70,7 @@ add_executable(test_runner
     test_oled_stats.c
     ../main/display/oled/oled_stats.c
     test_link_frame.c
+    test_link_handshake.c
     test_main.c
 )
 
