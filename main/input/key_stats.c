@@ -42,9 +42,6 @@ uint16_t bigram_stats[NUM_KEYS][NUM_KEYS] = {0};
 uint32_t bigram_total = 0;
 static int16_t last_key_idx = -1;
 #ifndef TEST_HOST
-static uint32_t bigram_last_saved_total = 0;
-static TickType_t bigram_last_save_tick = 0;
-static bool bigram_save_disabled = false;
 #endif
 
 /* ── Record a keypress ───────────────────────────────────────────── */
@@ -143,36 +140,27 @@ void load_key_stats(void)
     key_stats_last_save_tick = xTaskGetTickCount();
 }
 
-void save_bigram_stats(void)
-{
-    esp_err_t err = nvs_save_blob_with_total(STORAGE_NAMESPACE, "bigram_stats", bigram_stats,
-                                              sizeof(bigram_stats), "bigram_total", bigram_total);
-    if (err != ESP_OK) {
-        if (err == ESP_ERR_NVS_NOT_ENOUGH_SPACE) {
-            ESP_LOGW(TAG, "NVS too small for bigram_stats (%u bytes), disabling save", (unsigned)sizeof(bigram_stats));
-            bigram_save_disabled = true;
-        } else {
-            ESP_LOGE(TAG, "Failed to save bigram_stats: %s", esp_err_to_name(err));
-        }
-        return;
-    }
-    bigram_last_saved_total = bigram_total;
-    bigram_last_save_tick = xTaskGetTickCount();
-    ESP_LOGI(TAG, "Bigram stats saved (total: %lu)", (unsigned long)bigram_total);
-}
+/* Persistance des bigrams retirée — les compteurs vivent en RAM, le temps d'une
+ * session.
+ *
+ * Le blob fait 8450 octets (uint16_t[NUM_KEYS][NUM_KEYS]) et son écriture partait
+ * de key_stats_check_save(), appelée par la tâche d'affichage. Or une écriture
+ * NVS désactive le cache d'instructions le temps de l'opération flash : tout code
+ * exécuté depuis la flash s'arrête, quelle que soit sa priorité. Le tick de scan
+ * y survit (le callback gptimer est IRAM_ATTR) mais le traitement des touches et
+ * l'envoi HID, non. C'était le seul chemin par lequel l'affichage — pourtant en
+ * priorité 2, sous le scan (5), l'envoi HID (4) et le traitement (3) — pouvait
+ * voler du temps à la frappe.
+ *
+ * Ce qui reste : le comptage, reset_bigram_stats(), et les commandes CDC
+ * KS_CMD_BIGRAMS_BIN / _TEXT / _RESET, qui répondent sur la session courante.
+ * Ce qui est perdu : les statistiques repartent de zéro à chaque redémarrage. */
+void save_bigram_stats(void) {}
 
-void load_bigram_stats(void)
-{
-    nvs_load_blob_with_total(STORAGE_NAMESPACE, "bigram_stats", bigram_stats,
-                              sizeof(bigram_stats), "bigram_total", &bigram_total);
-    if (bigram_total == 0) {
-        for (int i = 0; i < NUM_KEYS; i++)
-            for (int j = 0; j < NUM_KEYS; j++)
-                bigram_total += bigram_stats[i][j];
-    }
-    bigram_last_saved_total = bigram_total;
-    bigram_last_save_tick = xTaskGetTickCount();
-}
+/* Pendant de save_bigram_stats() : rien à recharger. Ne PAS relire l'ancien blob
+ * NVS — plus personne ne l'écrivant, il resterait figé à jamais et masquerait le
+ * comptage de la session. */
+void load_bigram_stats(void) {}
 
 void key_stats_check_save(void)
 {
@@ -182,12 +170,9 @@ void key_stats_check_save(void)
     if (diff >= KEY_STATS_SAVE_THRESHOLD || (diff > 0 && elapsed >= pdMS_TO_TICKS(KEY_STATS_SAVE_INTERVAL_MS)))
         save_key_stats();
 
-    if (!bigram_save_disabled) {
-        uint32_t bg_diff = bigram_total - bigram_last_saved_total;
-        TickType_t bg_elapsed = xTaskGetTickCount() - bigram_last_save_tick;
-        if (bg_diff >= BIGRAM_SAVE_THRESHOLD || (bg_diff > 0 && bg_elapsed >= pdMS_TO_TICKS(BIGRAM_SAVE_INTERVAL_MS)))
-            save_bigram_stats();
-    }
+    /* Les bigrams ne sont plus persistés (voir save_bigram_stats). Le blob de
+     * key_stats reste écrit ici : il fait NUM_KEYS entrées et non NUM_KEYS², donc
+     * une écriture bien plus courte. */
 }
 #else
 void save_key_stats(void)    {}

@@ -1,0 +1,17 @@
+# V2D — clavier filaire strict : ni BLE ni WiFi.
+#
+# Le V2D ne sert qu'en USB. La pile Bluedroid pesait ~500 Ko de binaire, une
+# tâche permanente et de l'activité 2,4 GHz, pour un mode HID Bluetooth
+# inutilisé. Prix assumé : plus de mode Bluetooth sur ce board (usb_bl_state et
+# les keycodes 0x2900-0x2F00 deviennent des no-op).
+#
+# KASE_NO_RADIO a un prompt, donc cette ligne est réellement prise en compte ;
+# KASE_HAS_BLE n'en a pas et se règle via son `default n if` dans le Kconfig.
+CONFIG_KASE_NO_RADIO=y
+CONFIG_BT_ENABLED=n
+
+# Pas de ligne pour le WiFi : ESP_WIFI_ENABLED n'a pas de prompt, donc une
+# surcharge en sdkconfig serait ignorée en silence — et surtout elle ne servirait
+# à rien ici. Vérifié sur le binaire : ni esp_wifi_init, ni esp_wifi_start, ni
+# wifi_init_config ne sont liés. Le flag reste à y dans le sdkconfig mais ne
+# porte aucun code sur ce board.

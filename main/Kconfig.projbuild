@@ -30,8 +30,24 @@ config KASE_HAS_DISPLAY
     help
         Compiles display backends and status display task.
 
+config KASE_NO_RADIO
+    bool "Clavier filaire strict : ni BLE ni WiFi"
+    default n
+    help
+      Retire la pile BLE d'un clavier qui ne sert qu'en USB. Gain : ~500 Ko de
+      binaire, la tâche Bluedroid et son activité 2,4 GHz en moins, et une
+      source de moins en concurrence avec le chemin de frappe.
+      Prix : le clavier perd le mode HID Bluetooth — la bascule usb_bl_state et
+      les keycodes Bluetooth (0x2900-0x2F00) deviennent des no-op.
+
+      À poser dans sdkconfig.defaults.<board>. Ce symbole a un PROMPT, donc il
+      est surchargeable depuis un sdkconfig ; KASE_HAS_BLE, lui, n'en a pas et
+      ne peut être forcé que par le `default n if` ci-dessous. Compléter avec
+      CONFIG_BT_ENABLED=n pour sortir aussi Bluedroid de la config.
+
 config KASE_HAS_BLE
     bool
+    default n if KASE_NO_RADIO
     default y if KASE_DEVICE_ROLE_KEYBOARD && !KASE_KBD_WIRELESS
     default n
     help
