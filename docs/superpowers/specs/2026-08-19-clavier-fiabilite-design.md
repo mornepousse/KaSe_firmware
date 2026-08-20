@@ -40,12 +40,37 @@ Un callback de scan (priorité 5) qui tombe entre les deux pose un nouveau `1` e
 de nouvelles données ; le `0` les efface. L'itération suivante voit `0` et saute
 le bloc : l'appui est perdu. Confirmé par lecture le 2026-08-19.
 
-**CR-1 — keycodes uploadés non validés.** `bin_cmd_setlayer`
-(`main/comm/cdc/cdc_binary_cmds.c:147`) valide l'index de couche de destination
-(`layer >= LAYERS` → erreur) mais **écrit les keycodes verbatim** sans vérifier
-les couches qu'ils encodent. Un `MO(99)` ou un `LT(99, kc)` envoyé par le
-contrôleur est stocké, puis indexera `keymaps[99]` à la frappe — lecture hors
-des bornes du tableau. `KS_CMD_SETKEY` (0x11) est à vérifier de la même façon.
+**CR-1 — couche hors-borne, partiellement gardée.** Analyse approfondie le
+2026-08-19, qui corrige la caractérisation initiale de cette spec.
+
+Les sites de consommation sont gardés, mais inégalement :
+
+- `MO` / `TO` : sûrs par construction — l'extraction est bornée par un test de
+  plage (`keycode >= MO_L0 && keycode <= MO_L9`, `key_processor.c:50`).
+- `LM` : gardé — `if (layer <= 9)` (`key_processor.c:57`). Fragile toutefois :
+  c'est un littéral, pas `LAYERS`, donc il mentirait si `LAYERS` changeait.
+- `LT` : gardé à l'entrée — `if (layer < LAYERS)` (`tap_hold.c:90`) — **mais le
+  garde est contournable.** Il empêche seulement l'appel à `recompute_lt_layer()`
+  et le bump d'`activate_seq` ; l'entrée hors-borne reste dans `pending[]` en état
+  `TH_HOLD`. Or `recompute_lt_layer()` (`tap_hold.c:60-70`) rebalaye tout le
+  tableau sans revérifier la borne, et retient son premier candidat par `!top`
+  quel que soit son `activate_seq`. Une LT encodant une couche 10-15 entrée en
+  `TH_HOLD` peut donc devenir `current_layout` lors d'un recalcul déclenché par
+  une autre LT.
+
+`K_LT_LAYER` et `K_LM_LAYER` masquent sur 4 bits, donc rendent 0-15 alors que
+`LAYERS` vaut 10 : les valeurs 10-15 sont atteignables depuis un upload.
+
+Ce qui reste à établir : l'entrée hors-borne atteint-elle réellement `TH_HOLD` ?
+Le garde est placé dans la branche d'activation, la transition d'état peut lui
+être antérieure. C'est une hypothèse précise et testable, pas une certitude —
+elle se tranche par un test qui pilote une LT hors-borne jusqu'au hold et observe
+`current_layout`.
+
+Deux réponses possibles, et elles ne demandent pas le même travail. Si le chemin
+existe : garde dans `recompute_lt_layer()` **et** validation à l'upload, en
+défense de profondeur. S'il n'existe pas : seule la validation à l'upload reste
+utile, comme garde de surface, et `layer <= 9` devient `layer < LAYERS`.
 
 L'audit note que cette absence de validation est la racine commune de CR-1 et de
 M6 : un seul garde à l'upload ferme les deux.
