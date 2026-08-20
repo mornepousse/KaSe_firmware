@@ -133,6 +133,27 @@ saura pas distinguer un gain de fiabilité d'un gain de latence.
 Les findings de l'audit classés ⚪ ou « peut-être by-design » (MO-2, F6, B3) ne
 sont pas traités.
 
+## 5 bis. Ces correctifs partent chez les utilisateurs du V2
+
+Les allègements du V2D (bigrams, BLE) sont isolés par `sdkconfig.defaults.v2_debug`
+et ne concernent que cette carte. **Les correctifs de fiabilité, eux, vivent dans
+le code commun** — `keyboard_task.c`, `key_processor.c`, `matrix_scan.c`,
+`cdc_binary_cmds.c`. Ce qu'on répare ici répare aussi le V1, le V2 et le dongle.
+
+Le V2 est la carte de production, distribuée en binaires par GitLab Releases. Un
+défaut de frappe corrigé ici profite donc à ses utilisateurs, et **une régression
+introduite ici les atteint aussi**. Trois conséquences sur la méthode :
+
+- Aucun correctif ne doit être conditionné à un board. S'il en faut un, c'est le
+  signe que le diagnostic est incomplet.
+- `./scripts/check.sh` complet — tous les boards — et non `--board kase_v2_debug`,
+  avant chaque commit.
+- La validation matérielle se fait sur le V2D parce qu'il est sur le bureau, mais
+  `docs/HARDWARE_SMOKE_TEST.md` doit être déroulé sur le V2 avant la release qui
+  emportera ces correctifs.
+
+Le chantier se termine donc naturellement par une release, pas par un merge.
+
 ## 6. Tests
 
 Tests host dans `test/`, ajoutés à `test/CMakeLists.txt` et déclarés dans
