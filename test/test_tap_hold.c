@@ -5,6 +5,7 @@
 #include "test_framework.h"
 #include "tap_hold.h"
 #include "key_definitions.h"   /* K_MT / K_LT / K_OSM, MOD_* */
+#include "keyboard_config.h"   /* LAYERS */
 #include "key_features.h"      /* osm_is_active / osm_consume (branche OSM du tap) */
 
 /* Horloge host contrôlable partagée (host_clock.c définit esp_timer_get_time) */
@@ -144,6 +145,43 @@ static void test_th_lt_layer_out_of_bounds(void) {
     current_layout = save_cur; last_layer = save_last;
 }
 
+/* 9 bis. CR-1 : la LT hors bornes SURVIT dans pending[] en TH_HOLD, parce que
+ *        activate_hold() pose e->state = TH_HOLD AVANT de tester la borne. Le
+ *        garde bloque seulement le bump d'activate_seq et le recalcul immédiat.
+ *        Quand une LT valide tenue en même temps est relâchée, deactivate_hold()
+ *        appelle recompute_lt_layer(), qui rebalaye pending[] et retient son
+ *        PREMIER candidat via `!top`, quel que soit son activate_seq — donc
+ *        l'entrée hors bornes, seule restante. current_layout part alors hors
+ *        des bornes de keymaps[], et toute lecture suivante lit à côté. */
+static void test_th_lt_oob_wins_recompute_after_valid_release(void) {
+    th_reset();
+    uint8_t save_cur = current_layout, save_last = last_layer;
+    current_layout = 0;
+
+    /* Une LT valide entre en hold. */
+    tap_hold_on_press(K_LT(1, 0x2C), 0, 0);
+    advance_ms(200);
+    tap_hold_tick();
+    TEST_ASSERT_EQ(current_layout, 1, "LT valide → couche 1 active");
+
+    /* Une LT hors bornes entre en hold à son tour : elle ne doit rien changer. */
+    tap_hold_on_press(K_LT(15, 0x2D), 0, 1);
+    advance_ms(200);
+    tap_hold_tick();
+    TEST_ASSERT_EQ(current_layout, 1, "LT hors bornes → ne prend pas la main");
+
+    /* On relâche la LT VALIDE. Le recalcul ne doit pas élire l'hors-bornes. */
+    tap_hold_on_release(0, 0);
+
+    TEST_ASSERT(current_layout < LAYERS,
+                "après relâchement de la LT valide, current_layout reste dans les bornes");
+    TEST_ASSERT(tap_hold_get_active_layer() < (int8_t)LAYERS,
+                "active_hold_layer reste dans les bornes");
+
+    tap_hold_on_release(0, 1);
+    current_layout = save_cur; last_layer = save_last;
+}
+
 /* 10. Deux LT tenues simultanément (bug audit E1) : relâcher la plus récente
  *     doit revenir à la couche de la LT encore tenue, PAS tout perdre ; relâcher
  *     les deux revient à la base. L'ancien code mettait active_hold_layer=-1 dès
@@ -174,6 +212,7 @@ void test_tap_hold(void) {
     TEST_RUN(test_th_interrupt_forces_hold);
     TEST_RUN(test_th_lt_hold_layer);
     TEST_RUN(test_th_lt_layer_out_of_bounds);
+    TEST_RUN(test_th_lt_oob_wins_recompute_after_valid_release);
     TEST_RUN(test_th_two_lt_concurrent);
     TEST_RUN(test_th_osm_tap_arms);
     TEST_RUN(test_th_consume_osm_then_mt);

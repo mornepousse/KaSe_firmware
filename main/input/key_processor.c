@@ -54,7 +54,9 @@ static void apply_momentary_layer(uint16_t keycode, uint8_t key_idx)
         mods = K_LM_MODS(keycode);
     }
 
-    if (layer <= 9) {
+    /* Borne exprimée par LAYERS et non par un littéral : `layer <= 9` était
+     * juste tant que LAYERS vaut 10, et devenait faux en silence sinon. */
+    if (layer < LAYERS) {
         last_layer = current_layout;
         current_layout = layer;
         lm_active_mods = mods;

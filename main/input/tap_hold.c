@@ -61,7 +61,15 @@ static void recompute_lt_layer(void)
 {
     tap_hold_entry_t *top = NULL;
     for (int i = 0; i < TAP_HOLD_MAX_PENDING; i++) {
+        /* La borne se revérifie ICI, et pas seulement dans activate_hold().
+         * Celui-ci pose e->state = TH_HOLD AVANT de tester la couche : une LT
+         * hors bornes reste donc dans pending[] en TH_HOLD, avec activate_seq à
+         * 0. Sans ce filtre, le relâchement d'une LT valide tenue en même temps
+         * la laisse gagner par `!top` — elle est alors la seule candidate — et
+         * current_layout part indexer keymaps[] hors du tableau (audit CR-1,
+         * reproduit par test_th_lt_oob_wins_recompute_after_valid_release). */
         if (pending[i].state == TH_HOLD && K_IS_LT(pending[i].keycode) &&
+            K_LT_LAYER(pending[i].keycode) < LAYERS &&
             (!top || pending[i].activate_seq > top->activate_seq))
             top = &pending[i];
     }
