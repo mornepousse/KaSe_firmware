@@ -277,10 +277,96 @@ static void test_probe_timeout_wraps_uint32_cleanly(void)
     TEST_ASSERT_EQ(hs.state, LINK_HS_IDLE, "retour au repos malgré le wrap");
 }
 
+/* ── I7 : le versant RÉCEPTEUR de la poignée de main ──────────────────────────
+ *
+ * Le contrat matériel exige que les DEUX moitiés ferment leur switch pour qu'un
+ * courant passe (NIPHARGUS_V2_HARDWARE.md). La machine ne modélisait que
+ * l'émetteur : la moitié sur batterie, elle, ne fermait jamais le sien, si bien
+ * qu'une poignée de main réussie ne faisait passer aucun courant.
+ *
+ * L'invariant de sûreté devient : en_5v ne passe à vrai qu'après un ÉCHANGE
+ * VÉRIFIÉ avec le pair — soit on a sondé et reçu un ACK, soit on a été sondé et
+ * on a répondu. Un seul switch fermé ne fait toujours rien passer.
+ */
+static void test_probed_answers_and_closes_its_own_switch(void)
+{
+    link_hs_t hs;
+    link_hs_init(&hs);
+
+    /* Sur batterie, sans USB : c'est le pair qui sonde. */
+    link_hs_action_t a = link_hs_step(&hs, LINK_HS_EV_PROBED, 100);
+    TEST_ASSERT_EQ(a, LINK_HS_ACT_ACK_AND_ENABLE_5V,
+                   "sondée → elle répond ET ferme son switch");
+    TEST_ASSERT(link_hs_5v_enabled(&hs), "son côté est fermé, le courant peut passer");
+    TEST_ASSERT_EQ(hs.state, LINK_HS_UP, "le pair est reconnu vivant");
+}
+
+static void test_probed_while_probing_still_pairs(void)
+{
+    /* Les deux moitiés branchées se sondent en même temps : chacune reçoit la
+     * sonde de l'autre alors qu'elle attend un ACK. Le lien doit s'établir quand
+     * même plutôt que de rester bloqué en attente mutuelle. */
+    link_hs_t hs;
+    link_hs_init(&hs);
+    link_hs_step(&hs, LINK_HS_EV_USB_PRESENT, 0);
+    TEST_ASSERT_EQ(hs.state, LINK_HS_PROBING, "on attend un ACK");
+
+    link_hs_action_t a = link_hs_step(&hs, LINK_HS_EV_PROBED, 10);
+    TEST_ASSERT_EQ(a, LINK_HS_ACT_ACK_AND_ENABLE_5V, "sonde croisée → on répond et on ferme");
+    TEST_ASSERT_EQ(hs.state, LINK_HS_UP, "le lien s'établit malgré le croisement");
+}
+
+static void test_probed_side_drops_5v_when_peer_goes_silent(void)
+{
+    /* Le récepteur n'a pas d'USB : il ne recevra jamais d'USB_GONE. Son seul
+     * moyen de savoir que le câble est parti est le silence du pair. */
+    link_hs_t hs;
+    link_hs_init(&hs);
+    link_hs_step(&hs, LINK_HS_EV_PROBED, 0);
+    TEST_ASSERT(link_hs_5v_enabled(&hs), "fermé après la sonde");
+
+    link_hs_action_t a = link_hs_step(&hs, LINK_HS_EV_TICK, LINK_HS_PEER_TIMEOUT_MS);
+    TEST_ASSERT_EQ(a, LINK_HS_ACT_DISABLE_5V, "silence du pair → on rouvre");
+    TEST_ASSERT(!link_hs_5v_enabled(&hs), "5 V mort après arrachage du jack");
+}
+
+static void test_repeated_probes_keep_the_link_alive(void)
+{
+    link_hs_t hs;
+    link_hs_init(&hs);
+    link_hs_step(&hs, LINK_HS_EV_PROBED, 0);
+    /* Le pair re-sonde périodiquement : chaque sonde vaut signe de vie. */
+    for (uint32_t t = 0; t < 5 * LINK_HS_PEER_TIMEOUT_MS; t += LINK_HS_PEER_TIMEOUT_MS / 2) {
+        link_hs_step(&hs, LINK_HS_EV_PROBED, t);
+        TEST_ASSERT(link_hs_5v_enabled(&hs), "les sondes répétées maintiennent le lien");
+    }
+}
+
+static void test_tick_alone_never_closes_the_switch(void)
+{
+    /* L'invariant, reformulé : sans le moindre échange avec le pair — ni ACK
+     * reçu, ni sonde reçue — rien ne doit fermer le switch, quel que soit le
+     * temps écoulé. */
+    link_hs_t hs;
+    link_hs_init(&hs);
+    hs.usb = true;   /* même avec du courant à donner */
+    for (uint32_t t = 0; t < 10 * LINK_HS_REPROBE_INTERVAL_MS; t += 37) {
+        link_hs_action_t a = link_hs_step(&hs, LINK_HS_EV_TICK, t);
+        TEST_ASSERT(a != LINK_HS_ACT_ENABLE_5V && a != LINK_HS_ACT_ACK_AND_ENABLE_5V,
+                    "aucun tick ne ferme le switch sans échange avec le pair");
+        TEST_ASSERT(!link_hs_5v_enabled(&hs), "5 V reste mort");
+    }
+}
+
 void test_link_handshake(void)
 {
     printf("\n-- poignée de main 5 V du lien --\n");
     test_starts_dead();
+    test_probed_answers_and_closes_its_own_switch();
+    test_probed_while_probing_still_pairs();
+    test_probed_side_drops_5v_when_peer_goes_silent();
+    test_repeated_probes_keep_the_link_alive();
+    test_tick_alone_never_closes_the_switch();
     test_probe_then_ack_enables_5v();
     test_never_enables_without_ack();
     test_probe_timeout_returns_to_idle();

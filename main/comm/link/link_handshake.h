@@ -6,6 +6,12 @@
  * d'étincelle. Une moitié à batterie vide n'est pas réveillable par le TRRS —
  * assumé au design matériel.
  *
+ * ── L'invariant de sûreté ────────────────────────────────────────────────────
+ *
+ * en_5v ne passe à vrai qu'après un ÉCHANGE VÉRIFIÉ avec le pair : soit on a
+ * sondé et reçu un ACK, soit on a été sondé et on a répondu. Le temps qui passe,
+ * la seule présence de l'USB, ou un événement inattendu ne le lèvent jamais.
+ *
  * Logique pure : l'horloge et les événements sont passés en argument, aucune
  * GPIO n'est touchée ici. L'appelant traduit les actions en gpio_set_level().
  */
@@ -34,6 +40,7 @@ typedef enum {
     LINK_HS_EV_USB_GONE,     /* le câble hôte a disparu */
     LINK_HS_EV_PEER_ACK,     /* la moitié d'en face a répondu à la sonde */
     LINK_HS_EV_PEER_FRAME,   /* trame valide reçue du pair (garde le lien vivant) */
+    LINK_HS_EV_PROBED,       /* le pair NOUS sonde (trame PROBE reçue et vérifiée) */
 } link_hs_event_t;
 
 typedef enum {
@@ -41,6 +48,11 @@ typedef enum {
     LINK_HS_ACT_SEND_PROBE,   /* émettre la sonde « t'es bien ma moitié ? » */
     LINK_HS_ACT_ENABLE_5V,    /* fermer le load switch */
     LINK_HS_ACT_DISABLE_5V,   /* rouvrir le load switch */
+    /* Répondre à la sonde ET fermer notre switch. Les deux vont ensemble : le
+     * contrat matériel exige que les DEUX moitiés ferment le leur pour qu'un
+     * courant passe, donc répondre sans fermer ne servirait à rien. Fermer un
+     * switch déjà fermé est sans effet, l'appelant n'a pas à s'en soucier. */
+    LINK_HS_ACT_ACK_AND_ENABLE_5V,
 } link_hs_action_t;
 
 typedef struct {
@@ -80,8 +92,28 @@ static inline link_hs_action_t link_hs_step(link_hs_t *h, link_hs_event_t ev,
     }
 
     if (ev == LINK_HS_EV_USB_PRESENT) h->usb = true;
-    if (ev == LINK_HS_EV_PEER_ACK || ev == LINK_HS_EV_PEER_FRAME)
+    if (ev == LINK_HS_EV_PEER_ACK || ev == LINK_HS_EV_PEER_FRAME ||
+        ev == LINK_HS_EV_PROBED)
         h->last_peer_ms = now_ms;
+
+    /* Le pair nous sonde : c'est un échange vérifié (la trame PROBE a passé son
+     * CRC avant d'arriver ici), donc on répond et on ferme notre côté. Traité
+     * avant le switch parce que ça vaut depuis n'importe quel état — y compris
+     * PROBING, quand les deux moitiés se sondent en même temps et resteraient
+     * sinon bloquées à s'attendre.
+     *
+     * Décision assumée (2026-08-19) : la sondée ferme TOUJOURS, même quand elle
+     * a son propre USB. Les deux rails 5 V se retrouvent alors reliés par le
+     * jack quand les deux câbles sont branchés ; la limitation de courant et le
+     * soft-start du load switch l'encaissent, mais ce n'est pas l'usage prévu —
+     * à vérifier au banc. L'alternative écartée était de ne pas fermer quand on
+     * est soi-même alimenté. */
+    if (ev == LINK_HS_EV_PROBED) {
+        h->state = LINK_HS_UP;
+        h->since_ms = now_ms;
+        h->en_5v = true;
+        return LINK_HS_ACT_ACK_AND_ENABLE_5V;
+    }
 
     switch (h->state) {
     case LINK_HS_IDLE:
