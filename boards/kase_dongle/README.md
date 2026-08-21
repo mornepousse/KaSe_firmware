@@ -1,44 +1,49 @@
-# kase_dongle — récepteur USB du Niphargus
+# kase_dongle — USB receiver for the Niphargus
 
-Récepteur USB pour le clavier split Niphargus. Il reçoit du **HID déjà fini** par
-NRF24L01+ et le présente à l'hôte en USB HID composite + CDC binaire.
+USB receiver for the Niphargus split keyboard. It receives **finished HID
+reports** over NRF24L01+ and presents them to the host as a USB HID composite
+device plus a CDC binary port.
 
-Matériel : `~/Documents/PCB-esp/dongle/dongle/` (projet KiCad 9, format M.2 Key B 3042).
+Hardware: `~/Documents/PCB-esp/dongle/dongle/` (KiCad 9 project, M.2 Key B 3042
+form factor).
 
-## Ce qu'il fait, et ce qu'il ne fait pas
+## What it does, and what it does not
 
-Le dongle **n'a pas de matrice, pas de keymap, pas de moteur d'entrée**. La moitié
-gauche du Niphargus fait tourner le sien — elle doit de toute façon le faire pour
-fonctionner en USB sans dongle — et n'envoie ici que des rapports HID terminés.
-Le dongle les repousse tels quels.
+The dongle has **no matrix, no keymap, no input engine**. The Niphargus left half
+runs its own — it has to anyway, since it must work over USB with no dongle in
+sight — and sends nothing but completed HID reports. The dongle pushes them
+through unchanged.
 
-Ce n'est pas un détail d'implémentation : c'est ce qui rend **structurellement
-impossible l'existence de deux moteurs keymap dans le système**, question qui
-s'était reposée trois fois. Le moteur, le bloc CLAVIER du protocole CDC et la
-keymap de carte ne sont pas compilés pour ce rôle ; les commandes CDC de keymap
-ne sont pas enregistrées et répondent `KS_STATUS_ERR_UNKNOWN`, ce qui dit
-franchement au logiciel de contrôle que cet appareil ne fait pas ça.
+That is not an implementation detail: it is what makes **two keymap engines
+structurally impossible in this system**, a question that came up three times
+before it was settled. The engine, the keyboard half of the CDC protocol and the
+board keymap are not compiled for this role; the keymap commands are not
+registered and answer `KS_STATUS_ERR_UNKNOWN`, which tells the controller
+software plainly that this device does not do that. A silent no-op would be worse
+than the missing feature.
 
-Il garde : l'appairage, la réception RF sur deux slots, la présentation HID, le
-CDC et la supervision (batterie, qualité de lien).
+It keeps: pairing, RF reception on two slots, HID presentation to the host, CDC,
+and supervision (battery, link quality).
 
-Conception complète : `docs/superpowers/specs/2026-08-19-dongle-role-niphargus-design.md`.
+Full design:
+[`dongle-role-niphargus-design.md`](../../docs/superpowers/specs/2026-08-19-dongle-role-niphargus-design.md).
 
-## Les deux slots
+## The two slots
 
-Ce ne sont plus deux moitiés d'un même clavier :
+These are no longer two halves of one keyboard:
 
-| Slot | Radio | Appareil |
+| Slot | Radio | Device |
 |---|---|---|
-| 0x01 | NRF#1 | le clavier — moitié maître du Niphargus |
-| 0x02 | NRF#2 | la souris **Conchodytes** |
+| 0x01 | NRF#1 | the keyboard — Niphargus master half |
+| 0x02 | NRF#2 | the **Conchodytes** mouse |
 
-D'où la règle que `main/comm/rf/rf_slot.h` verrouille : **la perte d'un slot ne
-relâche que ce que ce slot tenait**. Une souris qui sort de portée ne doit pas
-effacer la frappe en cours.
+Hence the rule locked down by `main/comm/rf/rf_slot.h`: **losing a slot releases
+only what that slot was holding.** A mouse going out of range must not wipe the
+keystroke in progress.
 
-Les clés NVS d'appairage gardent leurs noms d'origine (`mac_left` / `mac_right`) :
-les renommer désapparierait le matériel déjà appairé pour un gain cosmétique.
+The pairing keys in NVS keep their original names (`mac_left` / `mac_right`):
+renaming them would unpair hardware already in the field for a purely cosmetic
+gain.
 
 ## Build & flash
 
@@ -48,43 +53,43 @@ idf.py -B build_kase_dongle -DBOARD=kase_dongle \
        -DSDKCONFIG=build_kase_dongle/sdkconfig build
 ```
 
-Chaque carte a son propre dossier de build **et son propre `sdkconfig`**. Ne
-jamais construire deux cartes dans le même `build/` avec le `sdkconfig` racine :
-la configuration fuit de l'une à l'autre.
+Every board keeps its own build directory **and its own `sdkconfig`**. Never
+build two boards in the same `build/` with the root `sdkconfig`: the
+configuration leaks from one to the other.
 
-⚠️ **Le numéro `/dev/ttyUSBN` du dongle et celui du V2D s'échangent d'un
-branchement à l'autre.** Vérifier la MAC avant tout flash — le dongle est
-`ac:a7:04:18:81:ec` — plutôt que de se fier au numéro de port.
+⚠️ **The `/dev/ttyUSBN` numbers of the dongle and the V2D swap between plug-ins.**
+Check the MAC before flashing anything — the dongle is `ac:a7:04:18:81:ec` —
+rather than trusting the port number.
 
 ```bash
 idf.py -B build_kase_dongle -p /dev/ttyUSB0 flash
 ```
 
-## Brochage (ESP32-S3-WROOM-2)
+## Pinout (ESP32-S3-WROOM-2)
 
-Relevé sur la netlist `dongle.kicad_sch` :
+Read off the `dongle.kicad_sch` netlist:
 
 | Signal | GPIO | Notes |
 |---|---|---|
-| SPI MOSI | GPIO5 | partagé, R15 100 Ω série |
-| SPI MISO | GPIO6 | partagé, R16 100 Ω série |
-| SPI SCK | GPIO7 | partagé, R17 100 Ω série |
-| NRF#1 (clavier) CSN / CE / IRQ | GPIO13 / GPIO14 / GPIO8 | |
-| NRF#2 (souris) CSN / CE / IRQ | GPIO1 / GPIO4 / GPIO2 | |
-| USB D+ / D− | GPIO20 / GPIO19 | OTG natif, full-speed |
-| Bootstrap IO0 | GPIO0 | mode flash via RTS du CH340 |
+| SPI MOSI | GPIO5 | shared, R15 100 Ω series |
+| SPI MISO | GPIO6 | shared, R16 100 Ω series |
+| SPI SCK | GPIO7 | shared, R17 100 Ω series |
+| NRF#1 (keyboard) CSN / CE / IRQ | GPIO13 / GPIO14 / GPIO8 | |
+| NRF#2 (mouse) CSN / CE / IRQ | GPIO1 / GPIO4 / GPIO2 | |
+| USB D+ / D− | GPIO20 / GPIO19 | native OTG, full-speed |
+| Bootstrap IO0 | GPIO0 | flash mode via the CH340 RTS line |
 
-GPIO1 est une broche de strapping UART0 qui flotte à l'état bas au reset : les
-deux CSN sont forcés à l'état haut avant d'initialiser la moindre radio, sinon
-NRF#2 capte en parallèle le trafic SPI destiné à NRF#1 et le corrompt.
+GPIO1 is a UART0 strapping pin that floats low at reset, so both CSN lines are
+driven high before either radio is initialised — otherwise NRF#2 latches the SPI
+traffic meant for NRF#1 in parallel and corrupts it.
 
-## État
+## Status
 
-- **Bring-up** ✅ énumère `303a:4001`, CDC PING/FEATURES répondent.
-- **Pile NRF RX** ✅ les deux radios probent sur la vraie carte, canaux 76/82,
-  `rf_rx_task` démarre.
-- **Relais HID** — codé ; le critère de validation au banc est
-  `ack ≈ 100 %` avec `maxrt = 0` en frappe soutenue. Il ne peut pas être vérifié
-  avant les cartes Niphargus : le V2D n'a plus son module nRF.
+- **Bring-up** ✅ enumerates as `303a:4001`, CDC PING/FEATURES answer.
+- **NRF RX stack** ✅ both radios probe on the real board, channels 76/82,
+  `rf_rx_task` starts.
+- **HID relay** — written; the bench criterion is `ack ≈ 100 %` with `maxrt = 0`
+  under sustained typing. It cannot be checked before the Niphargus boards exist:
+  the V2D no longer carries its nRF module.
 
-L'ESP-NOW a été retiré avec le firmware des anciennes moitiés.
+ESP-NOW went out with the first-generation half firmware.
