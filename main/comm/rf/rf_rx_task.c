@@ -67,6 +67,7 @@ extern uint8_t current_press_row[];
 extern uint8_t current_press_col[];
 extern uint8_t current_press_stat[];
 extern uint8_t keycodes[];
+#include "matrix_flag.h"   /* test-and-clear partagé avec la boucle clavier */
 extern volatile uint8_t stat_matrix_changed;
 
 /* Matrix-test mode (toggled by KS_CMD_MATRIX_TEST in cdc_binary_cmds.c).
@@ -145,7 +146,7 @@ static void rebuild_press_arrays(void)
                 current_press_stat[filled] = 1;
                 filled++;
             }
-    stat_matrix_changed = 1;
+    matrix_flag_signal(&stat_matrix_changed);
 }
 
 /* ── Engine callbacks for heartbeat reconciliation ── */

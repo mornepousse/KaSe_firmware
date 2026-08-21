@@ -5,6 +5,7 @@
 #include "hid_report.h"
 #include "keyboard_actions.h"
 #include "matrix_scan.h"
+#include "matrix_flag.h"   /* test-and-clear du drapeau — audit F3 */
 #include "tap_hold.h"
 #include "tap_dance.h"
 #include "combo.h"
@@ -113,15 +114,20 @@ void vTaskKeyboard(void *pvParameters)
             }
         }
 
-        /* Matrix changed → full processing cycle */
-        if (stat_matrix_changed == 1) {
+        /* Matrix changed → full processing cycle.
+         *
+         * Le drapeau est consommé AVANT la lecture de l'état (matrix_flag_take
+         * fait le test et l'effacement ensemble). Le code effaçait après, si bien
+         * qu'un callback de scan tombant pendant build_keycode_report() voyait son
+         * front écrasé et perdu — audit F3. Voir matrix_flag.h pour le
+         * raisonnement complet. */
+        if (matrix_flag_take(&stat_matrix_changed)) {
             /* A keypress while the USB host is suspended (PC asleep, cable in) →
              * remote-wakeup so the key wakes the PC. Not gated on KBD_WIRELESS:
              * a wired keyboard is precisely the case where the user expects a
              * keypress to wake the machine. No-op when not suspended. */
             usb_try_remote_wakeup();
             build_keycode_report();
-            stat_matrix_changed = 0;
             process_matrix_changes();
 
             if (key_processor_has_tap()) {

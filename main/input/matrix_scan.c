@@ -1,4 +1,6 @@
 #include "matrix_scan.h"
+#include "matrix_flag.h"
+
 #include "keyboard_task.h"
 #include "key_stats.h"
 #include "keyboard_config.h"
@@ -112,7 +114,7 @@ static void keyboard_btn_cb(keyboard_btn_handle_t kbd_handle, keyboard_btn_repor
         status_display_notify_keypress();
 
     memcpy(prev_matrix_state, new_state, sizeof(prev_matrix_state));
-    stat_matrix_changed = 1;
+    matrix_flag_signal(&stat_matrix_changed);
     last_activity_time_ms = esp_timer_get_time() / 1000;
 
     if (keyboard_task_handle != NULL)

@@ -10,6 +10,7 @@ add_executable(test_runner
     ../main/input/key_stats.c
     test_board_config.c
     test_matrix_constants.c
+    test_matrix_flag.c
     test_led_anim_constants.c
     ../main/led/led_curve.c
     test_keymap_nvs.c
