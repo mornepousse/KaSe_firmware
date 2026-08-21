@@ -62,11 +62,11 @@ idf.py -B build_kase_v2_debug -DBOARD=kase_v2_debug -DSDKCONFIG=build_kase_v2_de
 Paramètre CMake : `-DBOARD=<name>` (pas `-DBOARD_VARIANT`). Chaque board a son
 propre dossier build (`build_kase_<name>/`) **et son propre `sdkconfig`** via
 `-DSDKCONFIG=build_kase_<name>/sdkconfig` — c'est ce qui évite la fuite de
-config entre boards (cf. Workflow anti-régression). 4 boards au total : V1, V2,
-V2D, dongle. Pour tout vérifier d'un coup :
+config entre boards (cf. Workflow anti-régression). 6 boards au total : V1, V2,
+V2D, dongle, niphar_left, niphar_right. Pour tout vérifier d'un coup :
 `./scripts/check.sh`.
 
-**ccache** : `check.sh` exporte `IDF_CCACHE_ENABLE=1` — les 4 boards partagent
+**ccache** : `check.sh` exporte `IDF_CCACHE_ENABLE=1` — les 6 boards partagent
 la plupart des composants, donc après le 1er board les suivants réutilisent les
 objets compilés (gros gain sur le build full + pre-push). Pour tes builds
 interactifs, ajoute `export IDF_CCACHE_ENABLE=1` à ton shell (ou source-le avant
@@ -139,6 +139,7 @@ main/
 
 boards/
 ├── kase_v1/   kase_v2/   kase_v2_debug/   kase_dongle/
+├── niphar_left/   niphar_right/   # Niphargus split, phase 1 (pas de carte fabriquée)
 └── kase_layout.inc  # Layout JSON shared V2/V2D
 ```
 
@@ -219,7 +220,7 @@ Source unique de vérité : `scripts/check.sh` (scaffold tripwire v0.10.1 ;
 `--host-only`/`--board` sont des alias conservés de `--fast`/`--variant`).
 - `./scripts/check.sh --host-only` — tests host (~secondes)
 - `./scripts/check.sh --board <name>` — host + build d'un board
-- `./scripts/check.sh` — host + build des 4 boards (sdkconfig isolé par board)
+- `./scripts/check.sh` — host + build des 6 boards (sdkconfig isolé par board)
 - Skip-si-déjà-vert : état inchangé depuis le dernier vert → sortie immédiate ;
   `--force` pour relancer quand même.
 - Sur rouge : le détail de la commande fautive est dans
@@ -299,7 +300,7 @@ secondaire).
 ## Release workflow
 
 1. Bump version via tag git `vX.Y.Z`
-2. `./scripts/check.sh` doit être vert (les 4 boards build)
+2. `./scripts/check.sh` doit être vert (les 6 boards build)
 3. Merge binaries avec `esptool.py merge_bin` pour les `_full.bin`
 4. `glab release create vX.Y.Z <files...>` (app + full)
 

@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(dirname "$SCRIPT_DIR")"
 cd "$REPO"
 
-ALL_BOARDS=(kase_v1 kase_v2 kase_v2_debug kase_dongle)
+ALL_BOARDS=(kase_v1 kase_v2 kase_v2_debug kase_dongle niphar_left niphar_right)
 DB="perf/sizes.json"
 GROWTH_PCT="${PERF_GROWTH_PCT:-5}"   # warn si +X% vs baseline
 TIGHT_PCT="${PERF_TIGHT_PCT:-15}"    # warn si marge OTA < X%

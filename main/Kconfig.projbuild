@@ -5,14 +5,20 @@ choice KASE_DEVICE_ROLE
     default KASE_DEVICE_ROLE_KEYBOARD
     help
         Selects the type of device this firmware runs on.
-        KEYBOARD = standalone keyboard with local matrix (V1, V2, V2D).
-        DONGLE   = USB receiver dongle for split wireless setup.
+        KEYBOARD     = standalone keyboard with local matrix (V1, V2, V2D).
+        DONGLE       = USB receiver dongle for split wireless setup.
+        NIPHAR_SLAVE = Niphargus right half: local matrix + Sharp LCD, no
+                        keymap engine, no HID output (see KASE_NIPHAR_MASTER
+                        for the left/master half, which reuses KEYBOARD).
 
 config KASE_DEVICE_ROLE_KEYBOARD
     bool "Keyboard (V1/V2/V2D)"
 
 config KASE_DEVICE_ROLE_DONGLE
     bool "Dongle (RX from halves)"
+
+config KASE_DEVICE_ROLE_NIPHAR_SLAVE
+    bool "Niphargus right half (slave: matrix + Sharp LCD, no keymap engine)"
 
 endchoice
 
@@ -25,10 +31,15 @@ config KASE_HAS_LOCAL_MATRIX
 
 config KASE_HAS_DISPLAY
     bool
+    default n if KASE_NIPHAR_MASTER
     default y if KASE_DEVICE_ROLE_KEYBOARD
     default n
     help
-        Compiles display backends and status display task.
+        Compiles display backends and status display task. Niphargus left
+        (KASE_NIPHAR_MASTER) has no screen at all (J12 unpopulated — see
+        docs/NIPHARGUS_V2_HARDWARE.md) and must take priority over the
+        KEYBOARD-role default: Kconfig honors the first satisfied `default`
+        in source order, so this override has to come first.
 
 config KASE_NO_RADIO
     bool "Clavier filaire strict : ni BLE ni WiFi"
@@ -47,7 +58,15 @@ config KASE_NO_RADIO
 
 config KASE_HAS_BLE
     bool
+    # Trois raisons INDEPENDANTES de couper le BLE, a garder toutes les trois :
+    # KASE_NO_RADIO est un choix par board pour un clavier strictement filaire
+    # (le V2D), tandis que les deux moities Niphargus le coupent par contrainte
+    # d'alimentation. Ne pas unifier sous KASE_NO_RADIO : son intitule dit
+    # "clavier filaire strict", or les moities Niphargus sont sans fil (nRF24).
+    # Le symbole mentirait sur ce qu'il decrit.
     default n if KASE_NO_RADIO
+    default n if KASE_NIPHAR_MASTER
+    default n if KASE_DEVICE_ROLE_NIPHAR_SLAVE
     default y if KASE_DEVICE_ROLE_KEYBOARD && !KASE_KBD_WIRELESS
     default n
     help
@@ -55,6 +74,12 @@ config KASE_HAS_BLE
         mode (KASE_KBD_WIRELESS): a smart keyboard reaches the host through the
         M.2 dongle over USB, so its own BLE radio is redundant — and dropping it
         frees ~80KB heap and removes its 2.4GHz activity near the NRF relay.
+        Also disabled on both Niphargus halves (KASE_NIPHAR_MASTER,
+        KASE_DEVICE_ROLE_NIPHAR_SLAVE): the power budget (HT7833, radio peaks)
+        does not allow for it — config and updates go over USB. Both `default`
+        lines above must stay before the KEYBOARD-role default: Kconfig honors
+        the first satisfied `default` in source order, same mechanism as
+        KASE_HAS_DISPLAY above.
 
 config KASE_KBD_WIRELESS
     bool "Keyboard talks to the M.2 dongle wirelessly (NRF HID + ESP-NOW config)"
@@ -64,6 +89,17 @@ config KASE_KBD_WIRELESS
       When set, a standalone keyboard relays its HID reports to the M.2 dongle
       over NRF24 and exchanges config over ESP-NOW, instead of acting as its own
       USB device. Wired keyboards (V1/V2) leave this off.
+
+config KASE_NIPHAR_MASTER
+    bool "Niphargus: this board is the LEFT half (master)"
+    default n
+    depends on KASE_DEVICE_ROLE_KEYBOARD
+    help
+      Moitié gauche du Niphargus. Elle réutilise le rôle KEYBOARD (matrice
+      locale, moteur keymap, USB HID, CDC binaire) et y ajoute ce qui est propre
+      au split : réception de la matrice de la moitié droite (lien TRRS en
+      filaire, nRF24 en sans-fil) et émission du rapport HID final vers le
+      dongle. C'est la seule moitié qui porte un moteur keymap.
 
 config KASE_VBUS_SENSE
     bool "Use a VBUS-sense GPIO for the USB-first auto-switch"

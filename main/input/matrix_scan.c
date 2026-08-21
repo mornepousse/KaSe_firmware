@@ -139,9 +139,16 @@ void rtc_matrix_deinit(void)
  * BENCH-TUNE: active level is HIGH here; flip if the matrix is active-low. */
 void matrix_arm_key_wake(void)
 {
-    const int cols[MATRIX_COLS] = { COLS0, COLS1, COLS2, COLS3, COLS4, COLS5,
+    /* Sized by the initializer, not by MATRIX_COLS/MATRIX_ROWS: boards with
+     * fewer than 13 cols / 5 rows (e.g. Niphargus 7x4) pad the tail with
+     * GPIO_NUM_NC in board.h. The loops below still stop at MATRIX_COLS/
+     * MATRIX_ROWS, so those padding entries are declared but never read —
+     * an explicit [MATRIX_COLS]/[MATRIX_ROWS] size here would make the
+     * literal initializer overflow and warn "excess elements" on every such
+     * board. See main/input/matrix_scan.c module comment. */
+    const int cols[] = { COLS0, COLS1, COLS2, COLS3, COLS4, COLS5,
                                     COLS6, COLS7, COLS8, COLS9, COLS10, COLS11, COLS12 };
-    const int rows[MATRIX_ROWS] = { ROWS0, ROWS1, ROWS2, ROWS3, ROWS4 };
+    const int rows[] = { ROWS0, ROWS1, ROWS2, ROWS3, ROWS4 };
 
     for (int i = 0; i < MATRIX_COLS; i++) {
         gpio_set_direction(cols[i], GPIO_MODE_OUTPUT);
@@ -159,7 +166,8 @@ void matrix_arm_key_wake(void)
 
 void matrix_disarm_key_wake(void)
 {
-    const int rows[MATRIX_ROWS] = { ROWS0, ROWS1, ROWS2, ROWS3, ROWS4 };
+    /* See matrix_arm_key_wake(): unsized on purpose, loop bound is real. */
+    const int rows[] = { ROWS0, ROWS1, ROWS2, ROWS3, ROWS4 };
     for (int i = 0; i < MATRIX_ROWS; i++) {
         gpio_wakeup_disable(rows[i]);
     }
@@ -176,16 +184,17 @@ void matrix_setup(void)
     static int output_gpios[MATRIX_COLS];
     static int input_gpios[MATRIX_ROWS];
 #if defined(BOARD_MATRIX_COL2ROW)
-    const int cols_map[MATRIX_COLS] = { COLS0, COLS1, COLS2, COLS3, COLS4, COLS5, COLS6, COLS7, COLS8, COLS9, COLS10, COLS11, COLS12 };
-    const int rows_map[MATRIX_ROWS] = { ROWS0, ROWS1, ROWS2, ROWS3, ROWS4 };
+    /* Unsized on purpose — see matrix_arm_key_wake() above. */
+    const int cols_map[] = { COLS0, COLS1, COLS2, COLS3, COLS4, COLS5, COLS6, COLS7, COLS8, COLS9, COLS10, COLS11, COLS12 };
+    const int rows_map[] = { ROWS0, ROWS1, ROWS2, ROWS3, ROWS4 };
 
     /* Reset all matrix GPIOs to detach any function set by ROM bootloader
        (UART0 on GPIO43/44, SPI on GPIO37, etc.) */
     for (int i = 0; i < MATRIX_COLS; i++) gpio_reset_pin(cols_map[i]);
     for (int i = 0; i < MATRIX_ROWS; i++) gpio_reset_pin(rows_map[i]);
 #else
-    const int cols_map[MATRIX_COLS] = { COLS0, COLS1, COLS2, COLS3, COLS4, COLS5, COLS6, COLS7, COLS8, COLS9, COLS10, COLS11, COLS12 };
-    const int rows_map[MATRIX_ROWS] = { ROWS0, ROWS1, ROWS2, ROWS3, ROWS4 };
+    const int cols_map[] = { COLS0, COLS1, COLS2, COLS3, COLS4, COLS5, COLS6, COLS7, COLS8, COLS9, COLS10, COLS11, COLS12 };
+    const int rows_map[] = { ROWS0, ROWS1, ROWS2, ROWS3, ROWS4 };
 #endif
     ESP_LOGI(TAG, "Cols (outputs): ");
     for (int i = 0; i < MATRIX_COLS; i++) {

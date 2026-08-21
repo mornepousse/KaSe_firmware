@@ -28,7 +28,7 @@ cd "$PROJECT_DIR" || exit 1
 export IDF_CCACHE_ENABLE=1
 
 # Variantes de build. Laisser vide pour un projet mono-cible.
-ALL_VARIANTS=(kase_v1 kase_v2 kase_v2_debug kase_dongle)
+ALL_VARIANTS=(kase_v1 kase_v2 kase_v2_debug kase_dongle niphar_left niphar_right)
 
 # Modules (monorepo, optionnel) : quand un hook passe --changed <fichier>, la
 # phase rapide est routée sur le premier module dont le glob matche. Sans match

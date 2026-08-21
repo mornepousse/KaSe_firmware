@@ -1,0 +1,17 @@
+CONFIG_KASE_DEVICE_ROLE_NIPHAR_SLAVE=y
+
+# Pas de BLE : le budget d'alimentation l'interdit (HT7833, pics radio hors
+# budget). La config et les mises à jour passent par USB.
+# KASE_HAS_BLE est un bool SANS prompt (main/Kconfig.projbuild) : il n'est PAS
+# surchargeable ici, le gate réel est le `default n if KASE_DEVICE_ROLE_NIPHAR_SLAVE`
+# dans le Kconfig. CONFIG_BT_ENABLED=n coupe la pile Bluedroid elle-même
+# (héritée de sdkconfig.defaults) — c'est ce qui a un effet.
+CONFIG_BT_ENABLED=n
+
+# La droite n'a pas d'USB utile en production (charge seulement, pas de HID) :
+# une console au connecteur de prog est précieuse au bring-up.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"

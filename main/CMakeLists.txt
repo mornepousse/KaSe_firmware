@@ -79,6 +79,13 @@ if(CONFIG_KASE_HAS_DISPLAY)
     )
 endif()
 
+# Bouchons d'affichage : rôle clavier SANS écran (Niphargus gauche). Les appels
+# status_display_* sont dispersés dans le chemin de frappe (matrix_scan.c,
+# keyboard_actions.c) ; les bouchonner ici évite d'y semer des #if permanents.
+if(CONFIG_KASE_DEVICE_ROLE_KEYBOARD AND NOT CONFIG_KASE_HAS_DISPLAY)
+    list(APPEND srcs "display/status_display_stubs.c")
+endif()
+
 # BLE HID — keyboard role only
 if(CONFIG_KASE_HAS_BLE)
     list(APPEND srcs
@@ -131,6 +138,11 @@ if(CONFIG_KASE_DEVICE_ROLE_DONGLE)
             "security/openpgp_crypto.c"
         )
     endif()
+endif()
+
+# Bouchons CDC du rôle esclave Niphargus (pas de display, pas de BLE)
+if(CONFIG_KASE_DEVICE_ROLE_NIPHAR_SLAVE)
+    list(APPEND srcs "comm/cdc/cdc_niphar_slave_stubs.c")
 endif()
 
 # RF RX (NRF24) — dongle role only
@@ -210,6 +222,7 @@ idf_component_register(
         "comm/cdc"
         "comm/ble"
         "comm/rf"
+        "comm/link"
         "input"
         "periph"
         "periph/trackpad"
