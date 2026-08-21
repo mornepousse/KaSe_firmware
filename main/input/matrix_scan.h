@@ -15,9 +15,14 @@
 #define INVALID_KEY_POS  0xFF
 
 
+/* Le dongle n'a pas de matrice : ni keymap, ni statistiques par position, ni
+ * état de matrice. Déclarer ces symboles chez lui obligeait sa carte à inventer
+ * des dimensions — c'est ce que board.h ne fait plus. */
+#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
 extern uint8_t MATRIX_STATE[MATRIX_ROWS][MATRIX_COLS];
 extern uint8_t SLAVE_MATRIX_STATE[MATRIX_ROWS][MATRIX_COLS];
 extern uint8_t (*matrix_states[])[MATRIX_ROWS][MATRIX_COLS];
+#endif
 extern uint8_t keycodes[6];
 extern uint8_t current_press_row[6];
 extern uint8_t current_press_col[6];

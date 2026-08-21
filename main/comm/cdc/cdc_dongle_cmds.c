@@ -44,15 +44,15 @@ static inline void put_u32_le(uint8_t *p, uint32_t v)
 /* ── KS_CMD_RF_STATUS ───────────────────────────────────────────────
  * Request: no payload.
  * Response (27 bytes):
- *   [0]    flags         bit0=link_left_up, bit1=link_right_up, bits2-7=rsvd
+ *   [0]    flags         bit0=lien clavier, bit1=lien souris, bits2-7=rsvd
  *   [1]    sig_left      rf_signal_q255(link_up,age,link_q) — 0..255, 0=down
  *   [2]    sig_right     idem for the right half
- *   [3..6] hb_age_left   u32 LE ms since last heartbeat from left
- *   [7..10] hb_age_right u32 LE ms since last heartbeat from right
- *   [11..14] pkt_rx_left  u32 LE total accepted packets from left
- *   [15..18] pkt_rx_right idem right
- *   [19..22] pkt_dup_left u32 LE dropped duplicates from left
- *   [23..26] pkt_dup_right idem right
+ *   [3..6]   age_kbd     u32 LE ms depuis le dernier paquet du clavier
+ *   [7..10]  age_mouse   idem souris
+ *   [11..14] pkt_rx_kbd  u32 LE paquets acceptés du clavier
+ *   [15..18] pkt_rx_mouse idem souris
+ *   [19..22] pkt_dup_kbd u32 LE doublons rejetés du clavier
+ *   [23..26] pkt_dup_mouse idem souris
  */
 static void bin_cmd_rf_status(uint8_t cmd, const uint8_t *p, uint16_t l)
 {
@@ -62,16 +62,16 @@ static void bin_cmd_rf_status(uint8_t cmd, const uint8_t *p, uint16_t l)
     rf_rx_get_status(&st);
 
     uint8_t buf[27];
-    buf[0] = (uint8_t)((st.link_left  ? 0x01 : 0) |
-                       (st.link_right ? 0x02 : 0));
-    buf[1] = rf_signal_q255(st.link_left,  st.hb_age_left_ms,  st.link_q_left);
-    buf[2] = rf_signal_q255(st.link_right, st.hb_age_right_ms, st.link_q_right);
-    put_u32_le(&buf[3],  st.hb_age_left_ms);
-    put_u32_le(&buf[7],  st.hb_age_right_ms);
-    put_u32_le(&buf[11], st.pkt_rx_left);
-    put_u32_le(&buf[15], st.pkt_rx_right);
-    put_u32_le(&buf[19], st.pkt_dup_left);
-    put_u32_le(&buf[23], st.pkt_dup_right);
+    buf[0] = (uint8_t)((st.link_kbd   ? 0x01 : 0) |
+                       (st.link_mouse ? 0x02 : 0));
+    buf[1] = rf_signal_q255(st.link_kbd,   st.age_kbd_ms,   st.link_q_kbd);
+    buf[2] = rf_signal_q255(st.link_mouse, st.age_mouse_ms, st.link_q_mouse);
+    put_u32_le(&buf[3],  st.age_kbd_ms);
+    put_u32_le(&buf[7],  st.age_mouse_ms);
+    put_u32_le(&buf[11], st.pkt_rx_kbd);
+    put_u32_le(&buf[15], st.pkt_rx_mouse);
+    put_u32_le(&buf[19], st.pkt_dup_kbd);
+    put_u32_le(&buf[23], st.pkt_dup_mouse);
 
     ks_respond(cmd, KS_STATUS_OK, buf, sizeof(buf));
 }

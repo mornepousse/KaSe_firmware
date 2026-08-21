@@ -20,9 +20,11 @@
 
 #define MAX_LAYER (LAYERS-1)
 #define MOD_LED_BYTES 2
+#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
 #define KEYMAP_COLS MATRIX_COLS
 #define REPORT_LEN (MOD_LED_BYTES+MATRIX_ROWS*KEYMAP_COLS)
 #define REPORT_COUNT_BYTES (MATRIX_ROWS*KEYMAP_COLS)
+#endif
 
 #define PLUGIN_BASE_VAL 0x135
 #define LAYER_HOLD_MAX_VAL 0x134
@@ -36,4 +38,6 @@ typedef struct config_data {
 extern uint8_t current_layout;
 
 #define MAX_LAYOUT_NAME_LENGTH 15
+#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
 extern char default_layout_names[LAYERS][MAX_LAYOUT_NAME_LENGTH];
+#endif

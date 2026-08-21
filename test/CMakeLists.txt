@@ -36,6 +36,7 @@ add_executable(test_runner
     ../main/periph/trackpad/trackpad_map.c
     test_rf_pairing.c
     ../main/comm/rf/rf_pairing.c
+    test_rf_slot.c
     test_rf_signal_q255.c
     ../main/comm/rf/rf_rx_task.c
     test_cdc_monitor.c

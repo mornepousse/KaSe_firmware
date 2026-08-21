@@ -2,8 +2,13 @@
 #include <stddef.h>   /* size_t — nécessaire pour les signatures de fonctions */
 #include <stdbool.h>  /* bool — retour des save_* (échec de persistance NVS) */
 #include "keyboard_config.h"
+/* Le dongle n'a pas de matrice : ni keymap, ni statistiques par position, ni
+ * état de matrice. Déclarer ces symboles chez lui obligeait sa carte à inventer
+ * des dimensions — c'est ce que board.h ne fait plus. */
+#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
 extern uint16_t keymaps[][MATRIX_ROWS][MATRIX_COLS];
 extern char default_layout_names[LAYERS][MAX_LAYOUT_NAME_LENGTH];
+#endif
 
 /* Macro step: one keypress in a sequence */
 #define MACRO_MAX_STEPS 24

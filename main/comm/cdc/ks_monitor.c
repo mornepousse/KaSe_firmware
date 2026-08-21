@@ -15,12 +15,12 @@ uint16_t ks_monitor_encode(uint8_t *buf, const ks_monitor_t *m)
     buf[9]  = m->layer_idx;
     buf[10] = m->wpm;
     put_u32(&buf[11], m->keys_total);
-    buf[15] = m->sig_left;
-    buf[16] = m->sig_right;
-    put_u16(&buf[17], m->hb_age_l_ms);
-    put_u16(&buf[19], m->hb_age_r_ms);
-    buf[21] = m->batt_l_dv; buf[22] = m->batt_l_soc; buf[23] = m->batt_l_chg;
-    buf[24] = m->batt_r_dv; buf[25] = m->batt_r_soc; buf[26] = m->batt_r_chg;
+    buf[15] = m->sig_kbd;
+    buf[16] = m->sig_mouse;
+    put_u16(&buf[17], m->age_kbd_ms);
+    put_u16(&buf[19], m->age_mouse_ms);
+    buf[21] = m->batt_kbd_dv; buf[22] = m->batt_kbd_soc; buf[23] = m->batt_kbd_chg;
+    buf[24] = m->batt_mouse_dv; buf[25] = m->batt_mouse_soc; buf[26] = m->batt_mouse_chg;
     buf[27] = m->bt_slot;
     return KS_MONITOR_SIZE;
 }

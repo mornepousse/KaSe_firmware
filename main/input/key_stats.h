@@ -5,14 +5,23 @@
 #include <stdint.h>
 #include "keyboard_config.h"
 
+/* key_stats_total reste déclaré sur tous les rôles : le moniteur CDC l'expose,
+ * et le dongle le tient à zéro (comm/rf/dongle_state.c) plutôt que d'amputer le
+ * format de trame. */
+extern uint32_t key_stats_total;
+
+/* Le dongle n'a pas de matrice : ni keymap, ni statistiques par position, ni
+ * état de matrice. Déclarer ces symboles chez lui obligeait sa carte à inventer
+ * des dimensions — c'est ce que board.h ne fait plus. */
+#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
 /* Key press counts per position */
 extern uint32_t key_stats[MATRIX_ROWS][MATRIX_COLS];
-extern uint32_t key_stats_total;
 
 /* Sequential key pair (bigram) counts */
 #define NUM_KEYS (MATRIX_ROWS * MATRIX_COLS)
 extern uint16_t bigram_stats[NUM_KEYS][NUM_KEYS];
 extern uint32_t bigram_total;
+#endif
 
 /* Record a new keypress at (row, col) — updates stats + bigrams */
 void key_stats_record_press(uint8_t row, uint8_t col);

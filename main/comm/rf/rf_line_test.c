@@ -10,8 +10,8 @@ static const char *TAG = "rf_line_test";
 
 void rf_line_test_run(void)
 {
-    rf_radio_cfg_t l = board_rf_left_cfg();
-    rf_radio_cfg_t r = board_rf_right_cfg();
+    rf_radio_cfg_t l = board_rf_radio1_cfg();
+    rf_radio_cfg_t r = board_rf_radio2_cfg();
 
     const struct { int gpio; const char *name; } ln[] = {
         { l.pin_mosi, "MOSI"   }, { l.pin_miso, "MISO"  }, { l.pin_sck, "SCK"    },

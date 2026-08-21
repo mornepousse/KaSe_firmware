@@ -21,7 +21,6 @@
 #include "matrix_scan.h"
 #if CONFIG_KASE_HAS_RF_RX
 #include "rf_rx_task.h"   /* rf_rx_pair_start */
-#include "trackpad.h"     /* trackpad_cfg_active, trackpad_cfg_apply_and_save */
 /* From dongle_engine_state.c — battery cache accessor */
 extern void dongle_cache_get_battery(uint8_t slot,
                                      uint8_t *batt_dV, uint8_t *soc_pct,
@@ -68,6 +67,21 @@ static void bin_cmd_dfu(uint8_t cmd, const uint8_t *p, uint16_t l)
     vTaskDelay(pdMS_TO_TICKS(100));
     reboot_to_dfu();
 }
+
+/* ── Bloc CLAVIER — pas compilé sur le dongle ────────────────────────────────
+ * Tout ce qui suit, jusqu'au bloc OTA, manipule une keymap, une matrice, des
+ * statistiques de frappe ou des macros. Le dongle du Niphargus n'a rien de tout
+ * cela : il reçoit du HID déjà fini
+ * (docs/superpowers/specs/2026-08-19-dongle-role-niphargus-design.md).
+ *
+ * Ces fonctions étaient jusqu'ici compilées puis simplement non enregistrées
+ * dans la table. Le dispatcher répondait bien KS_STATUS_ERR_UNKNOWN — le
+ * comportement était juste — mais le code restait là, et surtout il forçait le
+ * dongle à déclarer une matrice 5×14 et une keymap de 70 touches pour compiler
+ * un moteur qu'il ne fait pas tourner. C'est cette dépendance-là qu'on coupe :
+ * une carte ne doit pas avoir à mentir sur son matériel pour que le firmware
+ * compile. */
+#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
 
 /* ── Keymap ─────────────────────────────────────────────────────── */
 
@@ -869,6 +883,8 @@ static void bin_cmd_layout_json(uint8_t cmd, const uint8_t *p, uint16_t l)
     ks_respond_end();
 }
 
+#endif /* !CONFIG_KASE_DEVICE_ROLE_DONGLE — fin du bloc clavier */
+
 /* ── OTA ────────────────────────────────────────────────────────── */
 
 /* OTA_START: payload [size:u32 LE] → response OK + [chunk_size:u16 LE] */
@@ -938,7 +954,8 @@ static void bin_cmd_ota_abort(uint8_t cmd, const uint8_t *p, uint16_t l)
     }
 }
 
-/* ── Matrix test ───────────────────────────────────────────────── */
+/* ── Test matrice — pas de matrice sur le dongle ───────────────── */
+#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
 
 /* MATRIX_TEST: toggle test mode on/off.
    When ON: scan callback sends KR [0xB0] [row,col,state] on each change.
@@ -954,6 +971,7 @@ static void bin_cmd_matrix_test(uint8_t cmd, const uint8_t *p, uint16_t l)
     uint8_t resp[3] = { matrix_test_mode ? 1 : 0, MATRIX_ROWS, MATRIX_COLS };
     ks_respond(cmd, KS_STATUS_OK, resp, 3);
 }
+#endif /* !CONFIG_KASE_DEVICE_ROLE_DONGLE */
 
 /* NVS_RESET: erase all saved config, reboot with defaults.
    Payload [mask:u8]:
@@ -1034,23 +1052,23 @@ static void bin_cmd_monitor(uint8_t cmd, const uint8_t *p, uint16_t l)
     m.flags |= KS_MON_F_HAS_RF;
     rf_link_status_t st;
     rf_rx_get_status(&st);
-    if (st.link_left)  m.flags |= KS_MON_F_LINK_L;
-    if (st.link_right) m.flags |= KS_MON_F_LINK_R;
-    m.sig_left   = rf_signal_q255(st.link_left,  st.hb_age_left_ms,  st.link_q_left);
-    m.sig_right  = rf_signal_q255(st.link_right, st.hb_age_right_ms, st.link_q_right);
-    m.hb_age_l_ms = (st.hb_age_left_ms  > 0xFFFFu) ? 0xFFFFu : (uint16_t)st.hb_age_left_ms;
-    m.hb_age_r_ms = (st.hb_age_right_ms > 0xFFFFu) ? 0xFFFFu : (uint16_t)st.hb_age_right_ms;
+    if (st.link_kbd)   m.flags |= KS_MON_F_LINK_KBD;
+    if (st.link_mouse) m.flags |= KS_MON_F_LINK_MOUSE;
+    m.sig_kbd      = rf_signal_q255(st.link_kbd,   st.age_kbd_ms,   st.link_q_kbd);
+    m.sig_mouse    = rf_signal_q255(st.link_mouse, st.age_mouse_ms, st.link_q_mouse);
+    m.age_kbd_ms   = (st.age_kbd_ms   > 0xFFFFu) ? 0xFFFFu : (uint16_t)st.age_kbd_ms;
+    m.age_mouse_ms = (st.age_mouse_ms > 0xFFFFu) ? 0xFFFFu : (uint16_t)st.age_mouse_ms;
     /* Battery: mirror bin_cmd_battery (0xB6) data path from dongle_engine_state.c */
     {
         uint8_t dV, soc, chg; uint32_t age; /* age intentionally dropped — no batt_age field in ks_monitor_t */
         dongle_cache_get_battery(0, &dV, &soc, &chg, &age);
-        m.batt_l_dv  = dV;
-        m.batt_l_soc = soc;
-        m.batt_l_chg = chg;
+        m.batt_kbd_dv  = dV;
+        m.batt_kbd_soc = soc;
+        m.batt_kbd_chg = chg;
         dongle_cache_get_battery(1, &dV, &soc, &chg, &age);
-        m.batt_r_dv  = dV;
-        m.batt_r_soc = soc;
-        m.batt_r_chg = chg;
+        m.batt_mouse_dv  = dV;
+        m.batt_mouse_soc = soc;
+        m.batt_mouse_chg = chg;
     }
 #endif /* CONFIG_KASE_HAS_RF_RX */
 
@@ -1059,29 +1077,9 @@ static void bin_cmd_monitor(uint8_t cmd, const uint8_t *p, uint16_t l)
     ks_respond(cmd, KS_STATUS_OK, buf, KS_MONITOR_SIZE);
 }
 
-#if CONFIG_KASE_HAS_RF_RX
-/* TRACKPAD_GET (0xB8): no payload → 7B cfg (fmt u8, base/accel/gain_max u16 LE) */
-static void bin_cmd_trackpad_get(uint8_t cmd, const uint8_t *p, uint16_t l)
-{
-    (void)p; (void)l;
-    uint8_t buf[TRACKPAD_CFG_SIZE];
-    trackpad_cfg_encode(buf, trackpad_cfg_active());
-    ks_respond(cmd, KS_STATUS_OK, buf, TRACKPAD_CFG_SIZE);
-}
-
-/* TRACKPAD_SET (0xB9): payload 6B [base:u16 LE][accel:u16 LE][gain_max:u16 LE]
- * Validates, applies live, persists to NVS, echoes applied cfg (7B). */
-static void bin_cmd_trackpad_set(uint8_t cmd, const uint8_t *p, uint16_t l)
-{
-    if (l < 6) { ks_respond_err(cmd, KS_STATUS_ERR_INVALID); return; }
-    trackpad_cfg_t c;
-    if (!trackpad_cfg_decode(p, l, &c)) { ks_respond_err(cmd, KS_STATUS_ERR_INVALID); return; }
-    if (!trackpad_cfg_apply_and_save(&c)) { ks_respond_err(cmd, KS_STATUS_ERR_RANGE); return; }
-    uint8_t buf[TRACKPAD_CFG_SIZE];
-    trackpad_cfg_encode(buf, trackpad_cfg_active());
-    ks_respond(cmd, KS_STATUS_OK, buf, TRACKPAD_CFG_SIZE);   /* echo applied */
-}
-#endif /* CONFIG_KASE_HAS_RF_RX */
+/* Les commandes de réglage du trackpad ont été retirées avec le moteur : elles
+ * étaient dongle-only du temps où il appliquait la gestuelle. Elles reviendront
+ * avec le driver, côté moitié gauche, en phase 2 du Niphargus. */
 
 #if CONFIG_KASE_HAS_RF_RX
 /* RF_PAIR_START: payload [reset:u8]. Opens a 30 s pairing window asynchronously

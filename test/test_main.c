@@ -21,6 +21,7 @@ extern void test_tap_dance(void);
 extern void test_combo(void);
 extern void test_leader(void);
 extern void test_rf_packet(void);
+extern void test_rf_slot(void);
 extern void test_heartbeat(void);
 extern void test_trackpad_map(void);
 extern void test_trackpad_accel_curve(void);
@@ -67,6 +68,7 @@ int main(void) {
     test_combo();
     test_leader();
     test_rf_packet();
+    test_rf_slot();
     test_heartbeat();
     test_trackpad_map();
     test_trackpad_accel_curve();
