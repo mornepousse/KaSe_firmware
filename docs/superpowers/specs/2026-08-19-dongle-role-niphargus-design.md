@@ -168,6 +168,45 @@ structurellement impossible à reposer.
 Il garde : l'appairage (`set_id`, adresses, deux slots), la réception RF, la
 présentation HID à l'hôte, le CDC, et la lecture des heartbeats.
 
+## 7 bis. Antécédent : ce format a déjà mal marché
+
+**Le relais HID a été essayé en juin sur le V2D, et les résultats étaient
+mauvais.** C'est le seul élément de terrain qu'on ait sur ce format, il doit
+figurer ici plutôt que dans les souvenirs.
+
+Trois causes ont été identifiées depuis, et elles ne sont pas le format :
+
+1. **Débit incohérent.** `rf_driver_rearm_rx()` remettait la radio à 2 Mbps
+   alors que l'init la configurait à 1 Mbps : elle devenait sourde. Corrigé —
+   `rf_driver.c:260` porte `REG_RF_SETUP = 0x06` avec le commentaire
+   « MUST match ».
+2. **Watchdog armé contre une radio saine.** Le déclencheur était l'âge du
+   heartbeat, or le relais HID n'en envoyait aucun : il réarmait donc une radio
+   parfaitement fonctionnelle toutes les 2 secondes, avec un `FLUSH_RX` et une
+   fenêtre de surdité à chaque fois. Corrigé — le déclencheur est désormais tout
+   paquet reçu (`rf_rx_task.c:96-99`). **La cadence adaptative de §5 supprime
+   cette cause par construction** : le lien n'est plus jamais silencieux.
+3. **Câblage bodge.** Le V2D était une carte modifiée à la main. Le Niphargus a
+   un PCB routé, 100 Ω série sur chaque ligne et des plans de masse soignés.
+
+Le point de comparaison va dans l'autre sens : le lien **moitiés → dongle**, sur
+de vrais PCB et avec des heartbeats, a été mesuré à `ack=100% maxrt=0` en continu
+(`docs/DONGLE_ARCHI_ET_HALF_TYPING_2026-07-13.md`, qui conclut « RF innocentée »
+à trois reprises). C'est la configuration du Niphargus, pas celle du relais.
+
+### Critère de validation au banc
+
+**Le lien gauche → dongle doit tenir `ack ≈ 100 %` avec `maxrt = 0`** en frappe
+soutenue, sur PCB routé et avec les heartbeats actifs. C'est la mesure qui a
+innocenté le lien des moitiés ; elle est directement comparable.
+
+Si ce critère n'est pas tenu, **ce n'est plus le câblage** : les trois causes
+connues sont écartées, donc c'est le design. Le repli est alors le slot 2 partagé
+en multiceiver avec la souris (§8, R2).
+
+Ce critère ne peut pas être vérifié avant les cartes : le V2D n'a plus son module
+nRF, donc l'expérience de juin n'est pas rejouable.
+
 ## 8. Risques
 
 **R1 — les commandes CDC de keymap du dongle deviennent vides de sens.** Elles
