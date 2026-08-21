@@ -7,14 +7,52 @@ dongle.
 
 > KeSp provides the framework. Your board definition provides the hardware specifics.
 
-**Four board targets** share the codebase via `boards/<name>/` and per-board
+**Six board targets** share the codebase via `boards/<name>/` and per-board
 Kconfig gates: `kase_v1` (round display), `kase_v2` (OLED), `kase_v2_debug`
-(V2 + debug overrides), and `kase_dongle` (USB receiver).
+(V2 + debug overrides), `kase_dongle` (USB receiver), and `niphar_left` /
+`niphar_right` (the split keyboard — see below).
 
-> The split keyboard is being redesigned as **Niphargus** (two ESP32-S3 halves,
-> nRF24 link, Sharp Memory LCD, Azoteq trackpad). Its firmware lives in this
-> repository and ships separately; the first-generation e-ink halves were
-> removed in v4.1.0.
+---
+
+## Work in progress — Niphargus, and what it changed
+
+The split keyboard is being redesigned as **Niphargus**: two ESP32-S3 halves
+joined by a wired TRRS link, a nRF24 radio to the dongle, an Azoteq TPS43
+trackpad on the left, a Sharp Memory LCD on the right. **No hardware exists
+yet** — the boards build, and everything below the driver line is pure logic
+covered by host tests. Configuration and updates go over USB; there is no WiFi
+and no BLE on either half.
+
+Two decisions shape the whole codebase, and they are worth stating plainly
+because both replaced an earlier design that is still visible in the git history.
+
+**The left half is the master, in all circumstances.** It carries the only
+keymap engine and the trackpad; the right half is a scanner that sends its
+half-matrix over the wire. The left half has to run the engine anyway — it must
+work over USB with no dongle in sight — so putting a second engine anywhere else
+would mean two sources of truth for the same keystroke. That question came up
+three times in two months; it is now closed by construction.
+
+**The dongle is a repeater, not a brain.** It receives *finished HID reports*
+and pushes them to the host. The input engine is not compiled for that role, the
+keyboard half of the CDC protocol is not compiled either, and its `board.h` no
+longer declares a matrix — because it has no switches. Keymap commands sent to a
+dongle answer `KS_STATUS_ERR_UNKNOWN` rather than pretending to work: a silent
+no-op would be worse than the missing feature.
+
+Its two radio slots are no longer two halves of one keyboard. Slot 1 is the
+keyboard, slot 2 is the **Conchodytes** mouse — two unrelated devices, which is
+why losing one slot releases only what that slot was holding. A mouse going out
+of range must not wipe the keystroke in progress.
+
+Removed along the way, and not coming back: the first-generation e-ink halves,
+their ESP-NOW side channel, and the dongle's keymap engine.
+
+| Document | |
+|---|---|
+| [`niphargus-firmware-design.md`](docs/superpowers/specs/2026-08-19-niphargus-firmware-design.md) | overall design |
+| [`dongle-role-niphargus-design.md`](docs/superpowers/specs/2026-08-19-dongle-role-niphargus-design.md) | the dongle's role, and the RF budget behind it |
+| [`docs/NIPHARGUS_V2_HARDWARE.md`](docs/NIPHARGUS_V2_HARDWARE.md) | pinout, verified against the netlist |
 
 ---
 
@@ -41,17 +79,24 @@ Kconfig gates: `kase_v1` (round display), `kase_v2` (OLED), `kase_v2_debug`
 - **WS2812 LED strip** — Reactive animations (breathe, chase, KPM bar)
 - **OTA firmware update** — Flash new firmware over USB CDC, no programmer needed
 - **Deep sleep** — Configurable inactivity timeout
-- **Trackpad** — Cirque/IQS5xx pointing device on a half (gestures, accel curve)
-- **E-ink status display** — SSD1681 monochrome dashboard on the halves (link/USB/battery)
+- **Trackpad** — gesture/acceleration mapping (pure logic, host-tested). The
+  Azoteq TPS43 driver lands with the Niphargus left half; the older IQS5xx
+  path went out with the first-generation halves.
 
 ### Wireless split & dongle
-- **NRF24L01+ RF link** — Halves (PTX) → USB dongle (PRX), Enhanced ShockBurst
-- **ESP-NOW side channel** — Pairing, config bridge (KS/KR tunnelled), e-ink status push
-- **USB dongle** — Presents as a plain keyboard to the host; runs the key engine
-  and relays HID; per-set addressing + pairing so multiple keyboards coexist
-- **Wireless relay mode** — A full keyboard (e.g. V2D) can process locally and
+- **NRF24L01+ RF link** — keyboard (PTX) → USB dongle (PRX), Enhanced ShockBurst,
+  carrying *finished HID reports* rather than raw matrix state
+- **USB dongle** — presents as a plain keyboard to the host and repeats what it
+  receives; two slots (keyboard, mouse) with per-set addressing and pairing, so
+  several sets coexist in the same room
+- **Link supervision** — a 4-byte idle status frame (battery, link quality). It
+  exists for one reason: a receiver cannot tell *"not typing"* from *"dead"* if
+  both look like silence
+- **Fail-safe on link loss** — release what that slot was holding, and only that
+- **Inter-half wire link** — length-prefixed frames with CRC-8 over TRRS, plus a
+  two-sided handshake before either half enables 5 V on the connector
+- **Wireless relay mode** — a full keyboard (e.g. V2D) can process locally and
   relay its final HID report to the dongle over RF
-- **Half power management** — Heartbeat throttle + light-sleep with keypress wake
 
 ### Security co-processor (dongle, optional)
 - **Compile-time personality** (Kconfig): `NONE` / OTP-HID (YubiKey-style CR-HMAC)
@@ -80,7 +125,9 @@ boards/
   kase_v1/              # Round SPI display (GC9A01), LED strip
   kase_v2/              # I2C OLED (SSD1306)
   kase_v2_debug/        # V2 + debug/wireless GPIO overrides (V2D)
-  kase_dongle/          # USB receiver (NRF24 RX), plain-keyboard to host
+  kase_dongle/          # USB receiver — no matrix, no keymap, no engine
+  niphar_left/          # Niphargus master: engine + trackpad (no hardware yet)
+  niphar_right/         # Niphargus scanner: matrix + Sharp LCD (no hardware yet)
 main/
   input/                # Matrix scan, key processing, HID reports
     keyboard_task.c     # Main coordinator (ISR → process → send)
@@ -102,10 +149,10 @@ main/
       cdc_ota.c         # OTA firmware update (binary only)
     ble/                # Bluetooth HID stack
     usb/                # USB HID (TinyUSB)
-    rf/                 # NRF24 driver, dongle RX / half TX, pairing, cfg bridge
-    espnow/             # ESP-NOW pairing + info channel
+    rf/                 # NRF24 driver, dongle RX / keyboard TX, slots, pairing
+    link/               # Niphargus inter-half wire link (frames + 5 V handshake)
   security/             # Dongle co-processor: SEC slots, OTP-HID, OpenPGP/CCID
-  periph/               # E-ink (SSD1681), trackpad (IQS5xx)
+  periph/               # Trackpad gesture/acceleration mapping
   display/
     status_display.c    # Backend-agnostic coordinator
     display_backend.h   # Backend interface (vtable)
@@ -113,7 +160,6 @@ main/
     round/              # SPI round display backend
   led/                  # WS2812 LED strip animations
   sys/                  # NVS helpers, CPU monitoring
-  config/               # Version
 test/                   # Host-side unit tests (CMake, link real modules)
 docs/                   # Protocol documentation
 scripts/                # Build automation, sprite conversion
@@ -216,8 +262,11 @@ Full protocol reference: [`docs/CDC_BINARY_PROTOCOL.md`](docs/CDC_BINARY_PROTOCO
 ## Adding a new board
 
 1. Create `boards/<name>/board.h` with hardware macros (GPIOs, display, USB IDs, etc.)
-2. Create `boards/<name>/board_keymap.c` with default keymaps
-3. Build: `idf.py -DBOARD=<name> build`
+2. Create `boards/<name>/board_keymap.c` and `board_layout.c` — **keyboard roles
+   only.** A board with no switches must not declare a matrix to make the build
+   pass; see `boards/kase_dongle/` for what a non-keyboard role looks like.
+3. Build with an isolated sdkconfig:
+   `idf.py -B build_<name> -DBOARD=<name> -DSDKCONFIG=build_<name>/sdkconfig build`
 
 See `boards/kase_v2/board.h` for a minimal example, `CONTRIBUTING.md` for conventions.
 
@@ -231,7 +280,8 @@ See `boards/kase_v2/board.h` for a minimal example, `CONTRIBUTING.md` for conven
 | [`docs/CDC_BINARY_PROTOCOL.md`](docs/CDC_BINARY_PROTOCOL.md) | Binary protocol reference (all commands) |
 | [`docs/KEYCODE_MAP.md`](docs/KEYCODE_MAP.md) | Keycode encoding specification |
 | [`docs/CDC_KEYSTATS_PROTOCOL.md`](docs/CDC_KEYSTATS_PROTOCOL.md) | Stats/bigrams binary format details |
-| [`docs/TAMA_SPRITE_GUIDE.md`](docs/TAMA_SPRITE_GUIDE.md) | Sprite design guide for artists |
+| [`docs/NIPHARGUS_V2_HARDWARE.md`](docs/NIPHARGUS_V2_HARDWARE.md) | Niphargus pinout — verified against the netlist |
+| [`docs/HARDWARE_SMOKE_TEST.md`](docs/HARDWARE_SMOKE_TEST.md) | Bench checklist to run before a merge or release |
 
 ---
 
