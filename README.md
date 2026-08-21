@@ -1,16 +1,20 @@
 # KeSp — Keyboard ESP32 Framework
 
-Open-source firmware framework for ESP32-S3 custom mechanical keyboards — from
-a single unibody board to a **wireless split** (two halves + a USB dongle),
-with display, USB/Bluetooth HID, advanced QMK-like keycodes, a virtual pet, and
-an optional **security co-processor** on the dongle.
+Open-source firmware framework for ESP32-S3 custom mechanical keyboards —
+unibody boards plus a **USB receiver dongle**, with display, USB/Bluetooth HID,
+advanced QMK-like keycodes, and an optional **security co-processor** on the
+dongle.
 
 > KeSp provides the framework. Your board definition provides the hardware specifics.
 
-**Six board targets** share the codebase via `boards/<name>/` and per-board
+**Four board targets** share the codebase via `boards/<name>/` and per-board
 Kconfig gates: `kase_v1` (round display), `kase_v2` (OLED), `kase_v2_debug`
-(V2 + debug/wireless overrides), `kase_dongle` (USB receiver), `kase_half_left`
-and `kase_half_right` (wireless e-ink halves).
+(V2 + debug overrides), and `kase_dongle` (USB receiver).
+
+> The split keyboard is being redesigned as **Niphargus** (two ESP32-S3 halves,
+> nRF24 link, Sharp Memory LCD, Azoteq trackpad). Its firmware lives in this
+> repository and ships separately; the first-generation e-ink halves were
+> removed in v4.1.0.
 
 ---
 
@@ -55,17 +59,15 @@ and `kase_half_right` (wireless e-ink halves).
 - Touch-gate confirm keycode, NVS-encryption + Secure-Boot V2 options
 - *Currently frozen to `NONE`* — the OpenPGP surface compiles out; re-enable via Kconfig
 
-### Statistics & Pet
-- **Key statistics** — Per-key press counts and bigram tracking, auto-saved to NVS
-- **Tamagotchi** — Virtual pet on both displays, driven by keyboard usage
-  - 20 evolution stages (OpenCritter sprites, MIT)
-  - Stats: hunger, happiness, energy, health
-  - Keyboard interactions: feed, play, sleep, medicine
-  - "Tama time" = keypresses (pauses when inactive, no penalty)
+### Statistics
+- **Key statistics** — Per-key press counts, auto-saved to NVS
+- **Bigram tracking** — Counted in RAM and readable over CDC. Not persisted since
+  v4.1.0: the NVS write ran from the display task and stalled the instruction
+  cache mid-typing.
 
 ### CDC Serial Protocol
 - **Binary-only protocol** — KS/KR frames with CRC-8, no ASCII fallback
-- **Full configuration** — Keymaps, macros, tap dance, combos, leader, tama
+- **Full configuration** — Keymaps, macros, tap dance, combos, leader
 - **Statistics** — Binary heatmap data + text format via binary frames
 - **OTA firmware update** — Binary OTA over CDC with chunked transfer
 
@@ -79,8 +81,6 @@ boards/
   kase_v2/              # I2C OLED (SSD1306)
   kase_v2_debug/        # V2 + debug/wireless GPIO overrides (V2D)
   kase_dongle/          # USB receiver (NRF24 RX), plain-keyboard to host
-  kase_half_left/       # Wireless half: matrix TX + e-ink + trackpad
-  kase_half_right/      # Wireless half (mirror)
 main/
   input/                # Matrix scan, key processing, HID reports
     keyboard_task.c     # Main coordinator (ISR → process → send)
@@ -110,11 +110,7 @@ main/
     status_display.c    # Backend-agnostic coordinator
     display_backend.h   # Backend interface (vtable)
     oled/               # I2C OLED backend
-    round/              # SPI round display + tamagotchi
-  tama/
-    tama_engine.c       # Game logic (display-agnostic)
-    tama_render.c       # LVGL sprite renderer
-    tama_sprites.h      # OpenCritter sprite data (MIT)
+    round/              # SPI round display backend
   led/                  # WS2812 LED strip animations
   sys/                  # NVS helpers, CPU monitoring
   config/               # Version
@@ -179,7 +175,6 @@ All keycodes are 16-bit, configurable via CDC serial or the remapping software.
 | Repeat | `K_REPEAT` | Repeat last keypress |
 | Leader | `K_LEADER` | Start key sequence |
 | Tap Dance | `K_TD(index)` | 1/2/3 taps + hold = 4 actions |
-| Tama Feed | `K_TAMA_FEED` | Feed the virtual pet |
 
 Full encoding spec: [`docs/KEYCODE_MAP.md`](docs/KEYCODE_MAP.md)
 
@@ -251,4 +246,3 @@ See `boards/kase_v2/board.h` for a minimal example, `CONTRIBUTING.md` for conven
 
 **GPL-3.0** — See [LICENSE](LICENSE).
 
-Tamagotchi sprites from [OpenCritter](https://github.com/SuperMechaCow/OpenCritter) (MIT License).
