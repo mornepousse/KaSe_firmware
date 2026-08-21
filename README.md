@@ -16,7 +16,8 @@ Kconfig gates: `kase_v1` (round display), `kase_v2` (OLED), `kase_v2_debug`
 
 ## Work in progress — Niphargus, and what it changed
 
-The split keyboard is being redesigned as **Niphargus**: two ESP32-S3 halves
+The split keyboard is being redesigned as
+**[Niphargus](https://github.com/mornepousse/Niphargus)**: two ESP32-S3 halves
 joined by a wired TRRS link, a nRF24 radio to the dongle, an Azoteq TPS43
 trackpad on the left, a Sharp Memory LCD on the right. **No hardware exists
 yet** — the boards build, and everything below the driver line is pure logic
@@ -41,7 +42,9 @@ dongle answer `KS_STATUS_ERR_UNKNOWN` rather than pretending to work: a silent
 no-op would be worse than the missing feature.
 
 Its two radio slots are no longer two halves of one keyboard. Slot 1 is the
-keyboard, slot 2 is the **Conchodytes** mouse — two unrelated devices, which is
+keyboard, slot 2 is the
+**[Conchodytes](https://github.com/mornepousse/Conchodytes)** mouse — two
+unrelated devices, which is
 why losing one slot releases only what that slot was holding. A mouse going out
 of range must not wipe the keystroke in progress.
 
@@ -287,8 +290,19 @@ See `boards/kase_v2/board.h` for a minimal example, `CONTRIBUTING.md` for conven
 
 ## Related projects
 
-- **KaSe PCB** — Hardware, schematics, mechanical design: https://github.com/mornepousse/KaSe_PCB
-- **KeSp Controller** — Desktop remapping software: https://github.com/mornepousse/KeSp_controller
+The firmware lives here; each keyboard's schematics, PCB and case live in their
+own repository.
+
+| Repository | What it is |
+|---|---|
+| [KaSe PCB](https://github.com/mornepousse/KaSe_PCB) | Hardware for the unibody boards — the KiCad project behind `kase_v1` / `kase_v2` / `kase_v2_debug` |
+| [Niphargus](https://github.com/mornepousse/Niphargus) | Hardware for the split keyboard — the boards `niphar_left` / `niphar_right` are written for |
+| [Conchodytes](https://github.com/mornepousse/Conchodytes) | The wireless mouse that shares this dongle — slot 2 of the RF link |
+| [KeSp Controller](https://github.com/mornepousse/KeSp_controller) | Desktop remapping software, speaking the CDC binary protocol |
+
+This repository is developed on [GitLab](https://gitlab.com/harrael/KeSp_firmware)
+and mirrored to [GitHub](https://github.com/mornepousse/KeSp_firmware) — commits,
+tags and releases alike.
 
 ---
 
