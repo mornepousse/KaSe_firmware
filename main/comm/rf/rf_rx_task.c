@@ -73,8 +73,6 @@ extern volatile uint8_t stat_matrix_changed;
 /* Matrix-test mode (toggled by KS_CMD_MATRIX_TEST in cdc_binary_cmds.c).
  * Globals live in dongle_engine_state.c. When on, RF key events are streamed
  * raw to the controller and the engine/HID is skipped. */
-extern volatile bool matrix_test_mode;
-extern volatile uint32_t matrix_test_last_activity_ms;
 #define MATRIX_TEST_TIMEOUT_MS 30000
 
 #define MAX_REPORT_KEYS 6
@@ -87,8 +85,6 @@ extern void process_matrix_changes(void);
 extern void send_hid_key(void);
 extern bool key_processor_has_tap(void);
 extern void key_processor_clear_taps(void);
-extern void tap_hold_tick(void);
-extern void tap_dance_tick(void);
 
 static rf_radio_t s_left, s_right;
 
@@ -108,6 +104,8 @@ static SemaphoreHandle_t s_evt_sem;
 
 /* Last link_q received from each half (PKT_HEARTBEAT.link_q).
  * Read by rf_rx_get_status() → CDC RF_STATUS. */
+static bool s_left_link_up  = false;
+static bool s_right_link_up = false;
 static uint8_t s_link_q_left  = 0;
 static uint8_t s_link_q_right = 0;
 
@@ -129,55 +127,18 @@ static void IRAM_ATTR nrf_irq_isr(void *arg)
 }
 
 /* ── Rebuild compact current_press_* arrays from MATRIX_STATE ── */
-static void rebuild_press_arrays(void)
+/* Le dongle ne fait plus tourner de moteur : il reçoit du HID déjà fini et le
+ * repousse à l'hôte. rebuild_press_arrays(), les callbacks de réconciliation et
+ * run_engine_cycle() ont été retirés avec la matrice — voir
+ * docs/superpowers/specs/2026-08-19-dongle-role-niphargus-design.md
+ *
+ * Ce qui reste à surveiller : le silence d'une moitié. Sans matrice à relâcher,
+ * la sécurité se ramène à un rapport HID vide — sinon la dernière frappe reçue
+ * resterait enfoncée sur l'hôte indéfiniment. */
+static void release_all_keys_on_host(void)
 {
-    for (int i = 0; i < MAX_REPORT_KEYS; i++) {
-        current_press_row[i] = INVALID_KEY_POS;
-        current_press_col[i] = INVALID_KEY_POS;
-        current_press_stat[i] = 0;
-        keycodes[i] = 0;
-    }
-    uint8_t filled = 0;
-    for (uint8_t r = 0; r < MATRIX_ROWS && filled < MAX_REPORT_KEYS; r++)
-        for (uint8_t c = 0; c < MATRIX_COLS && filled < MAX_REPORT_KEYS; c++)
-            if (MATRIX_STATE[r][c]) {
-                current_press_row[filled] = r;
-                current_press_col[filled] = c;
-                current_press_stat[filled] = 1;
-                filled++;
-            }
-    matrix_flag_signal(&stat_matrix_changed);
-}
-
-/* ── Engine callbacks for heartbeat reconciliation ── */
-static void on_force_press(void *ctx, uint8_t half, uint8_t row, uint8_t col)
-{
-    (void)ctx;
-    uint8_t gcol = (half == HB_HALF_RIGHT) ? col + HALF_R_COL_OFFSET : col;
-    if (row < MATRIX_ROWS && gcol < MATRIX_COLS) MATRIX_STATE[row][gcol] = 1;
-}
-static void on_force_release(void *ctx, uint8_t half, uint8_t row, uint8_t col)
-{
-    (void)ctx;
-    uint8_t gcol = (half == HB_HALF_RIGHT) ? col + HALF_R_COL_OFFSET : col;
-    if (row < MATRIX_ROWS && gcol < MATRIX_COLS) MATRIX_STATE[row][gcol] = 0;
-}
-static const hb_callbacks_t s_cb = { on_force_press, on_force_release, NULL };
-
-/* ── Run one engine cycle (mirrors keyboard_task.c matrix-changed branch) ── */
-static void run_engine_cycle(void)
-{
-    rebuild_press_arrays();
-    build_keycode_report();
-    process_matrix_changes();
-    if (key_processor_has_tap()) {
-        send_hid_key();
-        vTaskDelay(pdMS_TO_TICKS(10));
-        key_processor_clear_taps();
-        send_hid_key();
-    } else {
-        send_hid_key();
-    }
+    static const uint8_t none[6] = {0};
+    hid_send_keyboard(0, none);
 }
 
 /* ── Process all pending packets from one radio ── */
@@ -190,46 +151,22 @@ static bool drain_radio(rf_radio_t *radio, hb_half_state_t *hb, uint8_t half)
         if (n == 0) break;
         /* Any packet = the radio is alive (watchdog liveness, not just heartbeats). */
         uint32_t rx_ms = (uint32_t)(esp_timer_get_time() / 1000);
-        if (half == HB_HALF_LEFT) s_left_last_rx_ms = rx_ms; else s_right_last_rx_ms = rx_ms;
+        if (half == HB_HALF_LEFT) { s_left_last_rx_ms = rx_ms;  s_left_link_up  = true; }
+        else                      { s_right_last_rx_ms = rx_ms; s_right_link_up = true; }
         uint8_t type = rf_packet_type(buf, n);
-        if (type == PKT_TYPE_KEY) {
-            rf_key_event_t e;
-            if (rf_decode_key(buf, n, &e) && hb_apply_key(hb, &e)) {
-                uint8_t gcol = (half == HB_HALF_RIGHT) ? e.col + HALF_R_COL_OFFSET : e.col;
-                if (e.row < MATRIX_ROWS && gcol < MATRIX_COLS) {
-                    if (matrix_test_mode) {
-                        /* Stream raw (row,col,pressed) to the controller; no engine/HID.
-                         * Mirrors matrix_scan.c so the soft's matrix test works on the dongle. */
-                        uint8_t evt[3] = { e.row, gcol, (uint8_t)(e.pressed ? 1 : 0) };
-                        matrix_test_last_activity_ms = esp_timer_get_time() / 1000;
-                        ks_respond(KS_CMD_MATRIX_TEST, KS_STATUS_OK, evt, 3);
-                    } else {
-                        MATRIX_STATE[e.row][gcol] = e.pressed ? 1 : 0;
-                        changed = true;
-                    }
-                }
-            } else {
-                radio->pkt_dup++;
-            }
-        } else if (type == PKT_TYPE_HEARTBEAT) {
+        /* PKT_TYPE_KEY (matrice brute) et PKT_TYPE_TRACKPAD (gestuelle brute) ne
+         * sont plus traités : plus personne ne les émet depuis le retrait des
+         * anciennes moitiés, et le Niphargus envoie du HID déjà fini. Le dongle
+         * ne décode plus aucune matrice — c'est ce qui rend impossible
+         * l'existence de deux moteurs keymap dans le système. */
+        if (type == PKT_TYPE_HEARTBEAT) {
             rf_heartbeat_t h;
             if (rf_decode_heartbeat(buf, n, &h)) {
-                uint32_t now = esp_timer_get_time() / 1000;
-                hb_reconcile(hb, half, &h, &s_cb, now);
-                /* Update last link_q for signal quality derivation */
+                /* Plus de réconciliation de bitmap : il n'y a plus de matrice
+                 * côté dongle. Le heartbeat ne sert plus qu'à la présence, à la
+                 * batterie et à la qualité du lien. */
                 if (half == HB_HALF_LEFT)  s_link_q_left  = h.link_q;
                 else                        s_link_q_right = h.link_q;
-                changed = true;   /* reconciliation may have changed MATRIX_STATE */
-            }
-        } else if (type == PKT_TYPE_TRACKPAD) {
-            rf_trackpad_t tp;
-            if (rf_decode_trackpad(buf, n, &tp)) {
-                static trackpad_state_t s_tp_state[2];   /* [HB_HALF_LEFT=0 / HB_HALF_RIGHT=1] */
-                trackpad_out_t out;
-                if (trackpad_map(tp.ge0, tp.ge1, tp.n_fingers, tp.rel_x, tp.rel_y,
-                                 trackpad_cfg_active(), &s_tp_state[half], &out)) {
-                    hid_send_mouse(out.buttons, out.dx, out.dy, out.scroll_v);
-                }
             }
         } else if (type == PKT_TYPE_HIDREPORT) {
             /* Relay path: smart keyboard already ran its engine; forward final HID
@@ -356,6 +293,11 @@ static bool rf_rx_pairing_service(void)
  * its RX config to self-heal — no reboot. Rate-limited; harmless if the half is
  * simply off (re-arm just rewrites registers, nothing to receive). */
 #define RF_REARM_SILENCE_MS 2000u
+
+/* Silence au-delà duquel une moitié est déclarée perdue et l'hôte voit tout
+ * relâché. Doit rester nettement au-dessus de la cadence de battement au repos
+ * (~1 s) pour ne pas relâcher un lien simplement inactif. */
+#define LINK_LOST_MS 2500u
 static void rf_rx_watchdog(uint32_t now)
 {
     static uint32_t s_left_rearm_ms = 0, s_right_rearm_ms = 0;
@@ -396,8 +338,19 @@ static void rf_rx_task(void *arg)
         uint32_t now = esp_timer_get_time() / 1000;
         bool was_up_left  = s_hb_left.link_up;
         bool was_up_right = s_hb_right.link_up;
-        hb_check_timeout(&s_hb_left,  HB_HALF_LEFT,  &s_cb, now, 250);
-        hb_check_timeout(&s_hb_right, HB_HALF_RIGHT, &s_cb, now, 250);
+        /* Perte de lien → relâcher tout sur l'hôte. hb_check_timeout() ne convient
+         * plus : il parcourait un bitmap de matrice qui n'existe plus ici, et
+         * n'aurait donc jamais rien relâché. On suit l'âge de réception. */
+        if (s_left_link_up && (now - s_left_last_rx_ms) > LINK_LOST_MS) {
+            s_left_link_up = false;
+            release_all_keys_on_host();
+            ESP_LOGW(TAG, "lien gauche perdu → toutes touches relâchées");
+        }
+        if (s_right_link_up && (now - s_right_last_rx_ms) > LINK_LOST_MS) {
+            s_right_link_up = false;
+            release_all_keys_on_host();
+            ESP_LOGW(TAG, "lien droit perdu → toutes touches relâchées");
+        }
         /* Relay path: on link loss emit a zero keyboard report so no key sticks.
          * Harmless on the raw-matrix path (engine will also release via MATRIX_STATE). */
         if ((was_up_left  && !s_hb_left.link_up) ||
@@ -407,21 +360,8 @@ static void rf_rx_task(void *arg)
         }
         rf_rx_watchdog(now);   /* self-heal a wedged NRF radio (no reboot) */
 
-        if (matrix_test_mode) {
-            /* Test events are streamed from drain_radio; skip the engine so no HID
-             * is emitted. Auto-exit after 30 s without CDC activity (matches keyboards). */
-            if (now - matrix_test_last_activity_ms > MATRIX_TEST_TIMEOUT_MS) {
-                matrix_test_mode = false;
-                ESP_LOGW(TAG, "matrix test mode timeout — auto-exit");
-            }
-            continue;
-        }
 
-        tap_hold_tick();
-        tap_dance_tick();
-
-        if (changed)
-            run_engine_cycle();
+        (void)changed;   /* plus de moteur à réveiller : le HID arrive déjà fini */
     }
 }
 

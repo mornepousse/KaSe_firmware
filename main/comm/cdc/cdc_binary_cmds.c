@@ -1109,6 +1109,14 @@ static const ks_bin_cmd_entry_t bin_cmd_table[] = {
     { KS_CMD_VERSION,           bin_cmd_version },
     { KS_CMD_FEATURES,          bin_cmd_features },
     { KS_CMD_DFU,               bin_cmd_dfu },
+    /* ── Commandes CLAVIER — non enregistrées sur le dongle ──────────────────
+     * Le dongle du Niphargus reçoit du HID déjà fini et ne porte plus de moteur
+     * keymap (docs/superpowers/specs/2026-08-19-dongle-role-niphargus-design.md).
+     * Ces commandes n'y ont donc plus de sens. Plutôt que de les bouchonner et
+     * de faire semblant, on ne les enregistre pas : le dispatcher répond alors
+     * KS_STATUS_ERR_UNKNOWN, ce qui dit franchement au logiciel de contrôle que
+     * cet appareil ne fait pas ça. Un rejet muet serait pire que le défaut. */
+#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
     /* Keymap */
     { KS_CMD_LAYER_INDEX,       bin_cmd_layer_index },
     { KS_CMD_KEYMAP_CURRENT,    bin_cmd_keymap_get },
@@ -1170,14 +1178,19 @@ static const ks_bin_cmd_entry_t bin_cmd_table[] = {
     { KS_CMD_KO_SET,            bin_cmd_ko_set },
     { KS_CMD_KO_LIST,           bin_cmd_ko_list },
     { KS_CMD_KO_DELETE,         bin_cmd_ko_delete },
-    /* Diagnostics */
+    /* Test matrice : le dongle n'a plus de matrice à tester. */
     { KS_CMD_MATRIX_TEST,       bin_cmd_matrix_test },
+    /* Trackpad : les commandes de réglage d'accélération sont retirées. Elles
+     * étaient dongle-only du temps où il appliquait la gestuelle ; il ne le fait
+     * plus, et la moitié gauche qui le fera n'existe pas encore en matériel.
+     * Elles reviendront avec le driver trackpad, en phase 2 — les réenregistrer
+     * maintenant reviendrait à annoncer une fonction sans implémentation. */
+#endif /* !CONFIG_KASE_DEVICE_ROLE_DONGLE */
+    /* Diagnostics */
     { KS_CMD_NVS_RESET,         bin_cmd_nvs_reset },
     { KS_CMD_MONITOR,           bin_cmd_monitor },
 #if CONFIG_KASE_HAS_RF_RX
     { KS_CMD_RF_PAIR_START,     bin_cmd_rf_pair_start },
-    { KS_CMD_TRACKPAD_GET,      bin_cmd_trackpad_get },
-    { KS_CMD_TRACKPAD_SET,      bin_cmd_trackpad_set },
 #endif
     /* OTA */
     { KS_CMD_OTA_START,         bin_cmd_ota_start },

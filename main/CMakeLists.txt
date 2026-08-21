@@ -23,22 +23,33 @@ set(srcs
     # Security confirmation gate — compiled for all roles (key_processor calls it)
     "security/sec_confirm.c"
 
-    # Engine (always compiled — runs on both keyboard and dongle)
-    "input/key_processor.c"
-    "input/tap_hold.c"
-    "input/tap_dance.c"
-    "input/combo.c"
-    "input/leader.c"
-    "input/key_features.c"
-    "input/hid_report.c"
-    "input/keymap.c"
-    "input/key_stats.c"
-    "input/keyboard_actions.c"
-
     # Board-specific keymap + layout (always provided per board)
     "${BOARD_DIR}/board_keymap.c"
     "${BOARD_DIR}/board_layout.c"
 )
+
+# Moteur d'entrée — PAS sur le dongle.
+#
+# Il y était compilé du temps de l'architecture A, quand le dongle fusionnait les
+# demi-matrices des anciennes moitiés et appliquait la keymap. Le Niphargus lui
+# envoie du HID déjà fini (docs/superpowers/specs/2026-08-19-dongle-role-niphargus-design.md),
+# donc le dongle n'a plus rien à calculer — et surtout, l'exclure d'ici rend
+# structurellement impossible l'existence de deux moteurs keymap dans le système,
+# question qui s'est reposée trois fois en deux mois.
+if(NOT CONFIG_KASE_DEVICE_ROLE_DONGLE)
+    list(APPEND srcs
+        "input/key_processor.c"
+        "input/tap_hold.c"
+        "input/tap_dance.c"
+        "input/combo.c"
+        "input/leader.c"
+        "input/key_features.c"
+        "input/hid_report.c"
+        "input/keymap.c"
+        "input/key_stats.c"
+        "input/keyboard_actions.c"
+    )
+endif()
 
 # Local matrix scan + keyboard task — keyboard role only
 if(CONFIG_KASE_HAS_LOCAL_MATRIX)
@@ -151,13 +162,10 @@ if(CONFIG_KASE_HAS_RF_RX)
         "comm/rf/rf_driver.c"
         "comm/rf/rf_rx_task.c"
         "comm/rf/heartbeat.c"
-        "comm/rf/dongle_engine_state.c"
-        # Pure trackpad gesture+accel mapping: the dongle applies it on the raw
-        # trackpad packets received from the halves (approach B). The half only
-        # forwards raw data, so it does not compile this.
-        "periph/trackpad/trackpad_map.c"
-        # Runtime accel cfg store + NVS persistence (dongle only).
-        "periph/trackpad/trackpad_cfg.c"
+        "comm/rf/dongle_state.c"
+        # Plus de mapping trackpad ici : la moitié gauche applique la gestuelle
+        # elle-même (elle doit le faire pour fonctionner en USB sans dongle) et
+        # envoie du HID souris déjà fini.
     )
 endif()
 

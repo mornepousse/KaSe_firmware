@@ -190,9 +190,12 @@ void app_main(void) {
 #endif
   }
 
+#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
   keymap_init_nvs();
+#endif
 
   if (!safe_mode) {
+#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
     load_keymaps((uint16_t *)keymaps,
                  LAYERS * MATRIX_ROWS * MATRIX_COLS * sizeof(uint16_t));
     load_layout_names(default_layout_names, LAYERS);
@@ -213,6 +216,7 @@ void app_main(void) {
 #endif
   } else {
     ESP_LOGW(TAG, "Safe mode: skipping NVS config loading");
+#endif /* !CONFIG_KASE_DEVICE_ROLE_DONGLE */
   }
 
 #if CONFIG_KASE_DEVICE_ROLE_KEYBOARD
@@ -286,20 +290,10 @@ void app_main(void) {
   {
     /* Engine subsystem inits (keyboard_manager_init lives in keyboard_task.c
      * which is not compiled on the dongle — call the pieces directly). */
-    extern void tap_hold_init(void);
-    extern void tap_dance_init(void);
-    extern void combo_init(void);
-    extern void leader_init(void);
-    extern void key_override_init(void);
-    extern void hid_report_init(void);
+    /* Plus aucune initialisation de moteur ici : le dongle reçoit du HID déjà
+     * fini et n'a plus rien à calculer. Voir
+     * docs/superpowers/specs/2026-08-19-dongle-role-niphargus-design.md */
     extern bool rf_rx_start(void);
-    tap_hold_init();
-    tap_dance_init();
-    combo_init();
-    leader_init();
-    key_override_init();
-    hid_report_init();
-    trackpad_cfg_load();   /* load persisted accel cfg before first trackpad packet */
     if (!rf_rx_start())
       ESP_LOGE(TAG, "RF RX failed to start (no radios?)");
   }
