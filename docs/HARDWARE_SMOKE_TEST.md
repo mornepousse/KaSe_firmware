@@ -14,7 +14,7 @@ dans la PR/release.
 ## V1 (round display + LED)
 - [ ] Écran rond GC9A01 affiche sans corruption
 - [ ] LED strip : animation par défaut OK
-- [ ] Tama : sprite s'affiche et réagit
+- [ ] Aucune trace de tamagotchi (retiré en v4.1.0) : pas de pet, pas de barres
 
 ## V2 / V2D (OLED I2C)
 - [ ] OLED SSD1306 affiche sans artefact
