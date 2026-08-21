@@ -12,7 +12,7 @@
  * Logs results with ESP_LOGW under tag "rf_line_test", so it is visible even
  * when the app log level is WARN. Needs a console to read it
  * (CONFIG_ESP_CONSOLE_UART_DEFAULT on the dongle, which is CONSOLE_NONE in
- * production). Pins are read from board_rf_left_cfg()/board_rf_right_cfg(), so
+ * production). Pins are read from board_rf_radio1_cfg()/board_rf_radio2_cfg(), so
  * it is board-agnostic.
  *
  * Gated by CONFIG_KASE_NRF_LINE_TEST (default n); called once at boot from

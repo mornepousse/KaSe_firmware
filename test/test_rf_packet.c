@@ -71,6 +71,63 @@ static void test_rf_trackpad_roundtrip(void)
     TEST_ASSERT(!rf_decode_trackpad(buf, 8, &td), "tp short rejected");
 }
 
+/* ── Trame d'état — supervision du lien clavier → dongle ────────────────────
+ *
+ * Le §5 du design du dongle sépare deux fonctions que l'ancien heartbeat
+ * mélangeait : la réparation d'état et la supervision.
+ *
+ * La réparation passe par la réémission du PKT_TYPE_HIDREPORT lui-même, qui
+ * porte déjà l'état complet — inutile de l'emballer ailleurs. Reste la
+ * supervision : batterie, qualité de lien, et surtout un signe de vie, parce que
+ * le dongle ne peut pas distinguer « elle ne tape pas » de « elle est morte » si
+ * elle se tait dans les deux cas.
+ *
+ * D'où cette trame, volontairement minuscule : elle part au repos, environ une
+ * fois par seconde, et chaque octet y coûte du temps d'antenne et de la
+ * batterie.
+ */
+static void test_rf_status_roundtrip(void)
+{
+    uint8_t buf[16];
+    rf_status_t in = { .batt_dV = 41, .link_q = 3, .seq = 200 };
+
+    uint16_t n = rf_encode_status(buf, &in);
+    TEST_ASSERT_EQ(n, 4, "la trame d'état tient en 4 octets");
+    TEST_ASSERT_EQ(rf_packet_type(buf, n), PKT_TYPE_STATUS, "type STATUS");
+
+    rf_status_t out = {0};
+    TEST_ASSERT(rf_decode_status(buf, n, &out), "décodée");
+    TEST_ASSERT_EQ(out.batt_dV, 41, "batterie conservée");
+    TEST_ASSERT_EQ(out.link_q, 3,  "qualité de lien conservée");
+    TEST_ASSERT_EQ(out.seq, 200,   "seq conservé");
+}
+
+static void test_rf_status_rejects_short_and_wrong_type(void)
+{
+    uint8_t buf[16];
+    rf_status_t in = { .batt_dV = 40, .link_q = 0, .seq = 1 };
+    uint16_t n = rf_encode_status(buf, &in);
+    rf_status_t out = {0};
+
+    for (uint16_t cut = 0; cut < n; cut++)
+        TEST_ASSERT(!rf_decode_status(buf, cut, &out), "trame tronquée → rejet");
+
+    buf[0] = (PKT_TYPE_HEARTBEAT << 4);
+    TEST_ASSERT(!rf_decode_status(buf, n, &out), "type étranger → rejet");
+}
+
+static void test_rf_status_is_smaller_than_a_heartbeat(void)
+{
+    /* Elle part au repos, en continu, sur une moitié à batterie : sa taille est
+     * une contrainte de conception, pas un détail. L'ancien heartbeat traînait un
+     * bitmap de matrice dont le dongle n'a plus l'usage. */
+    uint8_t a[16], b[16];
+    rf_status_t st = { .batt_dV = 40, .link_q = 0, .seq = 0 };
+    rf_heartbeat_t hb = { .bitmap = {0}, .batt_dV = 40, .link_q = 0, .seq = 0 };
+    TEST_ASSERT(rf_encode_status(a, &st) < rf_encode_heartbeat(b, &hb),
+                "la trame d'état est plus courte que le heartbeat à bitmap");
+}
+
 static void test_rf_decode_rejects(void)
 {
     uint8_t buf[32];
@@ -269,6 +326,11 @@ void test_rf_packet(void)
     test_rf_heartbeat_roundtrip();
     test_rf_trackpad_roundtrip();
     test_rf_decode_rejects();
+
+    /* Supervision du lien clavier → dongle (design dongle §5) */
+    test_rf_status_roundtrip();
+    test_rf_status_rejects_short_and_wrong_type();
+    test_rf_status_is_smaller_than_a_heartbeat();
     test_rf_bitmap_all_positions();
     test_rf_pair_roundtrip();
 

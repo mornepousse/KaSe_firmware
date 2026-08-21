@@ -1,13 +1,20 @@
 /*
- * Dongle RF RX task: owns both NRF24 radios, per-half heartbeat state, and
- * the engine drive loop (mirrors keyboard_task.c but fed by RF instead of a
- * local matrix scan).
+ * Tâche RF du dongle : elle possède les deux radios NRF24 et rien d'autre.
+ *
+ * Ce ne sont plus deux moitiés d'un même clavier. Le slot 1 porte le clavier —
+ * la moitié maître du Niphargus, qui fait tourner son moteur keymap chez elle et
+ * n'envoie ici que du HID déjà fini — et le slot 2 porte la souris Conchodytes.
+ * Les deux appareils sont indépendants ; ce que rf_slot.h rend impossible à
+ * oublier, c'est que la perte de l'un ne doit rien relâcher de l'autre.
+ *
+ * Il n'y a donc plus ni matrice, ni réconciliation de bitmap, ni cycle moteur
+ * dans ce fichier : le dongle relaie et supervise.
  */
 
 /*
- * rf_signal_q255() — derive a 0..255 link-quality value for one half.
+ * rf_signal_q255() — derive a 0..255 link-quality value for one slot.
  *
- * 255 = best, 0 = link down / timed out. Displayed raw on the e-ink as "235/255".
+ * 255 = best, 0 = link down / timed out.
  * Pure function: no globals, no I/O. Host-testable (outside TEST_HOST guard).
  * Place before the #ifndef TEST_HOST block so it compiles in both contexts.
  */
@@ -18,7 +25,7 @@
 uint8_t rf_signal_q255(bool link_up, uint32_t hb_age_ms, uint8_t link_q)
 {
     /* Link is down if rf_rx_task flagged it, OR if the heartbeat age exceeds 3×
-     * the nominal heartbeat interval (500 ms → 1500 ms). 3× = two missed HBs. */
+     * the nominal heartbeat interval (500 ms → 1500 ms). 3× = two missed beats. */
     if (!link_up || hb_age_ms >= 1500u) return 0;
 
     /* Age factor: 255 when fresh, linear down to 0 at the 1500 ms timeout. */
@@ -38,8 +45,7 @@ uint8_t rf_signal_q255(bool link_up, uint32_t hb_age_ms, uint8_t link_q)
 
 #include "rf_driver.h"
 #include "rf_packet.h"
-#include "trackpad.h"
-#include "heartbeat.h"
+#include "rf_slot.h"
 #include "board_rf.h"
 #include "rf_pairing.h"   /* rf_pairing_load_set_id_dongle, rf_apply_set_id */
 #if CONFIG_KASE_NRF_LINE_TEST
@@ -47,9 +53,7 @@ uint8_t rf_signal_q255(bool link_up, uint32_t hb_age_ms, uint8_t link_q)
 #endif
 #include "keyboard_config.h"
 #include "hid_transport.h"
-#include "cdc_binary_protocol.h"   /* ks_respond, KS_CMD_MATRIX_TEST */
 #include "nvs.h"            /* nvs_open, nvs_get_blob, nvs_close */
-#include "tusb.h"           /* tud_ready() */
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_mac.h"      /* esp_read_mac, ESP_MAC_WIFI_STA */
@@ -61,58 +65,34 @@ uint8_t rf_signal_q255(bool link_up, uint32_t hb_age_ms, uint8_t link_q)
 
 static const char *TAG = "rf_rx";
 
-/* Engine globals (dongle_engine_state.c) */
-extern uint8_t MATRIX_STATE[MATRIX_ROWS][MATRIX_COLS];
-extern uint8_t current_press_row[];
-extern uint8_t current_press_col[];
-extern uint8_t current_press_stat[];
-extern uint8_t keycodes[];
-#include "matrix_flag.h"   /* test-and-clear partagé avec la boucle clavier */
-extern volatile uint8_t stat_matrix_changed;
+/* Radio 1 → slot clavier, radio 2 → slot souris. Le nom dit le rôle ; la
+ * configuration matérielle (broches, adresse, canal) reste nommée par la radio
+ * physique dans board_rf.h, parce que c'est ce qui est sérigraphié sur la carte. */
+static rf_radio_t s_kbd, s_mouse;
 
-/* Matrix-test mode (toggled by KS_CMD_MATRIX_TEST in cdc_binary_cmds.c).
- * Globals live in dongle_engine_state.c. When on, RF key events are streamed
- * raw to the controller and the engine/HID is skipped. */
-#define MATRIX_TEST_TIMEOUT_MS 30000
-
-#define MAX_REPORT_KEYS 6
-#define INVALID_KEY_POS 0xFF
-#define HALF_R_COL_OFFSET 7
-
-/* Engine entry points */
-extern void build_keycode_report(void);
-extern void process_matrix_changes(void);
-extern void send_hid_key(void);
-extern bool key_processor_has_tap(void);
-extern void key_processor_clear_taps(void);
-
-static rf_radio_t s_left, s_right;
-
-/* Last time each radio drained ANY packet (ms). The watchdog uses this — not the
- * heartbeat age — to decide a radio is wedged: the HID relay sends no heartbeats,
- * so a heartbeat-age trigger would re-arm a perfectly-working relay radio every
- * RF_REARM_SILENCE_MS (FLUSH_RX + a brief deaf window = needless dropped packets).
- * Any received packet (heartbeat, key, or HID report) refreshes this. */
-static uint32_t s_left_last_rx_ms = 0, s_right_last_rx_ms = 0;
+/* Présence de chaque slot : date du dernier paquet reçu, quel qu'il soit —
+ * battement, trame d'état ou rapport HID. C'est aussi ce que lit le chien de
+ * garde radio : se fier à l'âge du battement réarmerait une radio parfaitement
+ * saine dès que la moitié cesse d'en émettre (cf. §7 bis du design du dongle). */
+static rf_slot_link_t s_link[RF_SLOT_COUNT];
 
 /* Current per-radio config (set_id-derived) — kept so the radio watchdog can
  * re-arm a wedged radio with the live address/channel. Updated at init and on
  * every pairing hot-switch. */
-static rf_radio_cfg_t s_lcfg, s_rcfg;
-static hb_half_state_t s_hb_left, s_hb_right;
+static rf_radio_cfg_t s_kbd_cfg, s_mouse_cfg;
 static SemaphoreHandle_t s_evt_sem;
 
-/* Last link_q received from each half (PKT_HEARTBEAT.link_q).
- * Read by rf_rx_get_status() → CDC RF_STATUS. */
-static bool s_left_link_up  = false;
-static bool s_right_link_up = false;
-static uint8_t s_link_q_left  = 0;
-static uint8_t s_link_q_right = 0;
+/* Dernier link_q annoncé par chaque slot (battement ou trame d'état).
+ * Lu par rf_rx_get_status() → CDC RF_STATUS. */
+static uint8_t s_link_q[RF_SLOT_COUNT];
 
 /* ── Pairing window state (driven inside rf_rx_task) ── */
 static volatile bool s_pairing_mode = false;
 static uint32_t s_pair_deadline_ms = 0;
 static uint8_t  s_pair_paired_count = 0;
+/* Les clés NVS d'appairage gardent leurs noms d'origine : les renommer
+ * désapparierait le matériel déjà appairé pour un gain purement cosmétique.
+ * `left` y désigne le slot 0x01 (clavier), `right` le slot 0x02 (souris). */
 static uint8_t  s_pair_mac_left[6]  = {0};
 static uint8_t  s_pair_mac_right[6] = {0};
 #define RF_PAIR_WINDOW_MS 120000   /* 2 min — relaxed envelope for the manual BOOT-hold dance */
@@ -126,65 +106,82 @@ static void IRAM_ATTR nrf_irq_isr(void *arg)
     if (hpw) portYIELD_FROM_ISR();
 }
 
-/* ── Rebuild compact current_press_* arrays from MATRIX_STATE ── */
 /* Le dongle ne fait plus tourner de moteur : il reçoit du HID déjà fini et le
  * repousse à l'hôte. rebuild_press_arrays(), les callbacks de réconciliation et
  * run_engine_cycle() ont été retirés avec la matrice — voir
  * docs/superpowers/specs/2026-08-19-dongle-role-niphargus-design.md
  *
- * Ce qui reste à surveiller : le silence d'une moitié. Sans matrice à relâcher,
- * la sécurité se ramène à un rapport HID vide — sinon la dernière frappe reçue
- * resterait enfoncée sur l'hôte indéfiniment. */
-static void release_all_keys_on_host(void)
+ * Ce qui reste à surveiller : le silence d'un slot. Sans matrice à relâcher, le
+ * repli se ramène à un rapport vide — sinon le dernier rapport reçu resterait
+ * appliqué sur l'hôte indéfiniment.
+ *
+ * Et il porte sur ce slot-là uniquement : une souris qui sort de portée ne doit
+ * pas effacer la frappe en cours. C'est rf_slot_link_check() qui décide. */
+static void apply_safe_action(rf_safe_action_t action)
 {
     static const uint8_t none[6] = {0};
-    hid_send_keyboard(0, none);
+    if (action == RF_SAFE_RELEASE_KEYS)         hid_send_keyboard(0, none);
+    else if (action == RF_SAFE_RELEASE_BUTTONS) hid_send_mouse(0, 0, 0, 0);
 }
 
-/* ── Process all pending packets from one radio ── */
-static bool drain_radio(rf_radio_t *radio, hb_half_state_t *hb, uint8_t half)
+/* Le cache batterie n'avait plus personne pour l'alimenter depuis que la
+ * réconciliation des heartbeats a été retirée : la commande CDC BATTERY
+ * répondait « inconnu » en permanence. La trame d'état le remplit à nouveau.
+ * Elle ne porte que la tension — l'état de charge et la charge en cours restent
+ * inconnus plutôt que devinés, parce que quatre octets étaient une contrainte
+ * de conception et non un oubli. */
+extern void dongle_cache_set_battery(uint8_t slot, uint8_t batt_dV,
+                                     uint8_t soc_pct, uint8_t charging);
+
+static void cache_battery(uint8_t slot, uint8_t batt_dV)
 {
-    bool changed = false;
+    dongle_cache_set_battery(slot, batt_dV, 0xFF, 0xFF);
+}
+
+/* ── Vider les paquets en attente sur une radio ── */
+static void drain_radio(rf_radio_t *radio, uint8_t slot)
+{
     uint8_t buf[32];
     while (rf_driver_rx_available(radio)) {
         uint16_t n = rf_driver_read_rx(radio, buf, sizeof(buf));
         if (n == 0) break;
-        /* Any packet = the radio is alive (watchdog liveness, not just heartbeats). */
-        uint32_t rx_ms = (uint32_t)(esp_timer_get_time() / 1000);
-        if (half == HB_HALF_LEFT) { s_left_last_rx_ms = rx_ms;  s_left_link_up  = true; }
-        else                      { s_right_last_rx_ms = rx_ms; s_right_link_up = true; }
+        /* Tout paquet vaut preuve de vie, pas seulement les battements. */
+        rf_slot_link_rx(&s_link[slot], (uint32_t)(esp_timer_get_time() / 1000));
         uint8_t type = rf_packet_type(buf, n);
         /* PKT_TYPE_KEY (matrice brute) et PKT_TYPE_TRACKPAD (gestuelle brute) ne
          * sont plus traités : plus personne ne les émet depuis le retrait des
          * anciennes moitiés, et le Niphargus envoie du HID déjà fini. Le dongle
          * ne décode plus aucune matrice — c'est ce qui rend impossible
          * l'existence de deux moteurs keymap dans le système. */
-        if (type == PKT_TYPE_HEARTBEAT) {
+        if (type == PKT_TYPE_STATUS) {
+            /* Trame de repos : batterie et qualité du lien, aucun état de touche. */
+            rf_status_t st;
+            if (rf_decode_status(buf, n, &st)) {
+                s_link_q[slot] = st.link_q;
+                cache_battery(slot, st.batt_dV);
+            }
+        } else if (type == PKT_TYPE_HEARTBEAT) {
+            /* Ancien format, conservé le temps que le Niphargus le remplace :
+             * son bitmap n'est plus lu, il n'y a plus de matrice ici. */
             rf_heartbeat_t h;
             if (rf_decode_heartbeat(buf, n, &h)) {
-                /* Plus de réconciliation de bitmap : il n'y a plus de matrice
-                 * côté dongle. Le heartbeat ne sert plus qu'à la présence, à la
-                 * batterie et à la qualité du lien. */
-                if (half == HB_HALF_LEFT)  s_link_q_left  = h.link_q;
-                else                        s_link_q_right = h.link_q;
+                s_link_q[slot] = h.link_q;
+                cache_battery(slot, h.batt_dV);
             }
         } else if (type == PKT_TYPE_HIDREPORT) {
-            /* Relay path: smart keyboard already ran its engine; forward final HID
-             * report straight to USB. No MATRIX_STATE, no run_engine_cycle(). */
+            /* Le clavier a déjà fait tourner son moteur : on pousse tel quel. */
             uint8_t sub, mod, kb[6], btn; int8_t x, y, w;
             if (rf_decode_hidreport(buf, n, &sub, &mod, kb, &btn, &x, &y, &w)) {
                 if (sub == RF_HID_SUB_KBD)        hid_send_keyboard(mod, kb);
                 else if (sub == RF_HID_SUB_MOUSE) hid_send_mouse(btn, x, y, w);
             }
-            /* Do NOT set changed = true: no engine cycle for the relay path. */
         }
     }
-    return changed;
 }
 
 bool rf_rx_pair_start(uint8_t reset, uint16_t *set_id_out, uint8_t *paired_count_out)
 {
-    if (!s_left.present) return false;   /* need radio L for the rendezvous */
+    if (!s_kbd.present) return false;   /* la radio 1 porte le rendez-vous d'appairage */
 
     if (reset) {
         rf_pairing_reset_dongle();
@@ -193,8 +190,8 @@ bool rf_rx_pair_start(uint8_t reset, uint16_t *set_id_out, uint8_t *paired_count
 
     /* Switch radio L to the pairing rendezvous PRX. */
     static const uint8_t pair_addr[5] = RF_PAIR_ADDR;
-    rf_driver_set_channel(&s_left, RF_PAIR_CHANNEL);
-    rf_driver_set_rx_address(&s_left, pair_addr);
+    rf_driver_set_channel(&s_kbd, RF_PAIR_CHANNEL);
+    rf_driver_set_rx_address(&s_kbd, pair_addr);
 
     s_pair_deadline_ms = (uint32_t)(esp_timer_get_time() / 1000) + RF_PAIR_WINDOW_MS;
     s_pairing_mode = true;
@@ -211,23 +208,24 @@ static void rf_rx_apply_paired_config(void)
 {
     uint16_t set_id = (s_pair_paired_count > 0) ? rf_compute_set_id() : 0;
 
-    rf_radio_cfg_t lcfg = board_rf_left_cfg();
-    rf_radio_cfg_t rcfg = board_rf_right_cfg();
-    rf_apply_set_id(&lcfg, set_id, 0x01);
-    rf_apply_set_id(&rcfg, set_id, 0x02);
-    s_lcfg = lcfg; s_rcfg = rcfg;   /* keep live config for the radio watchdog */
+    rf_radio_cfg_t kcfg = board_rf_radio1_cfg();
+    rf_radio_cfg_t mcfg = board_rf_radio2_cfg();
+    rf_apply_set_id(&kcfg, set_id, 0x01);
+    rf_apply_set_id(&mcfg, set_id, 0x02);
+    s_kbd_cfg = kcfg; s_mouse_cfg = mcfg;   /* keep live config for the radio watchdog */
 
-    uint8_t laddr[5] = { lcfg.rx_addr[0], lcfg.rx_addr[1], lcfg.rx_addr[2],
-                         lcfg.rx_addr[3], lcfg.addr_suffix };
-    uint8_t raddr[5] = { rcfg.rx_addr[0], rcfg.rx_addr[1], rcfg.rx_addr[2],
-                         rcfg.rx_addr[3], rcfg.addr_suffix };
-    rf_driver_set_channel(&s_left,  lcfg.channel);
-    rf_driver_set_rx_address(&s_left, laddr);
-    if (s_right.present) {
-        rf_driver_set_channel(&s_right,  rcfg.channel);
-        rf_driver_set_rx_address(&s_right, raddr);
+    uint8_t kaddr[5] = { kcfg.rx_addr[0], kcfg.rx_addr[1], kcfg.rx_addr[2],
+                         kcfg.rx_addr[3], kcfg.addr_suffix };
+    uint8_t maddr[5] = { mcfg.rx_addr[0], mcfg.rx_addr[1], mcfg.rx_addr[2],
+                         mcfg.rx_addr[3], mcfg.addr_suffix };
+    rf_driver_set_channel(&s_kbd,  kcfg.channel);
+    rf_driver_set_rx_address(&s_kbd, kaddr);
+    if (s_mouse.present) {
+        rf_driver_set_channel(&s_mouse,  mcfg.channel);
+        rf_driver_set_rx_address(&s_mouse, maddr);
     }
-    ESP_LOGI(TAG, "hot-switch: set_id=0x%04X L ch=%u R ch=%u", set_id, lcfg.channel, rcfg.channel);
+    ESP_LOGI(TAG, "hot-switch: set_id=0x%04X clavier ch=%u souris ch=%u",
+             set_id, kcfg.channel, mcfg.channel);
 }
 
 /* Process the pairing rendezvous on radio L. Returns true while still pairing. */
@@ -243,10 +241,10 @@ static bool rf_rx_pairing_service(void)
         return false;
     }
 
-    /* Drain any PKT_PAIR_REQ on radio L. */
+    /* Drain any PKT_PAIR_REQ on radio 1. */
     uint8_t buf[32];
-    while (rf_driver_rx_available(&s_left)) {
-        uint16_t n = rf_driver_read_rx(&s_left, buf, sizeof(buf));
+    while (rf_driver_rx_available(&s_kbd)) {
+        uint16_t n = rf_driver_read_rx(&s_kbd, buf, sizeof(buf));
         if (n == 0) break;
         uint8_t mac[6];
         uint8_t declared_slot = 0;
@@ -255,8 +253,8 @@ static bool rf_rx_pairing_service(void)
         uint8_t slot = 0;
         bool is_dup = rf_pairing_match_slot(mac, s_pair_mac_left, s_pair_mac_right, &slot);
         if (!is_dup) {
-            /* Half declares its own slot (board identity) → order-independent,
-             * no L/R swap. Legacy halves send slot=0 → positional fallback. */
+            /* Le périphérique déclare son propre slot (identité de carte) →
+             * l'ordre d'appairage n'a plus d'importance. slot=0 → repli positionnel. */
             if (!rf_pairing_resolve_slot(declared_slot, s_pair_paired_count, &slot)) continue; /* full */
         }
 
@@ -278,7 +276,7 @@ static bool rf_rx_pairing_service(void)
         rf_encode_pair_ack(ackbuf, &ack);
 
         static const uint8_t pair_addr[5] = RF_PAIR_ADDR;
-        rf_driver_oob_tx(&s_left, RF_PAIR_CHANNEL, pair_addr, ackbuf, 10,
+        rf_driver_oob_tx(&s_kbd, RF_PAIR_CHANNEL, pair_addr, ackbuf, 10,
                          RF_PAIR_CHANNEL, pair_addr);   /* restore to PAIR PRX */
         ESP_LOGI(TAG, "ACK sent slot=0x%02X (dup=%d, paired_count=%u)",
                  slot, is_dup, s_pair_paired_count);
@@ -286,37 +284,37 @@ static bool rf_rx_pairing_service(void)
     return true;
 }
 
-/* ── Radio watchdog — re-arm a radio that's been silent too long ─────────────
- * NRF24 (clone) modules can wedge over time: stop ACKing/receiving the half
- * even though SPI is fine (observed: left ack% → 0, only a dongle reboot fixed
- * it). If a present radio gets NO heartbeat for > RF_REARM_SILENCE_MS, re-assert
- * its RX config to self-heal — no reboot. Rate-limited; harmless if the half is
- * simply off (re-arm just rewrites registers, nothing to receive). */
+/* ── Chien de garde radio — réarmer une radio muette trop longtemps ──────────
+ * Les modules NRF24 (clones) se figent avec le temps : ils cessent d'acquitter
+ * et de recevoir alors que le SPI répond toujours (observé : ack% → 0, seul un
+ * redémarrage du dongle rétablissait le lien). Au-delà de RF_REARM_SILENCE_MS
+ * sans le moindre paquet, on réécrit la configuration RX — pas de redémarrage.
+ * Limité en cadence, et sans effet si le périphérique est simplement éteint. */
 #define RF_REARM_SILENCE_MS 2000u
 
-/* Silence au-delà duquel une moitié est déclarée perdue et l'hôte voit tout
- * relâché. Doit rester nettement au-dessus de la cadence de battement au repos
- * (~1 s) pour ne pas relâcher un lien simplement inactif. */
+/* Silence au-delà duquel un slot est déclaré perdu et son repli appliqué. Doit
+ * rester nettement au-dessus de la cadence de la trame d'état au repos (~1 s)
+ * pour ne pas relâcher un lien simplement inactif. */
 #define LINK_LOST_MS 2500u
+
+static void rearm_if_silent(rf_radio_t *radio, const rf_radio_cfg_t *cfg,
+                            uint8_t slot, uint32_t *last_rearm_ms,
+                            uint32_t now, const char *name)
+{
+    if (!radio->present) return;
+    if ((uint32_t)(now - s_link[slot].last_rx_ms) <= RF_REARM_SILENCE_MS) return;
+    if ((uint32_t)(now - *last_rearm_ms) <= RF_REARM_SILENCE_MS) return;
+    rf_driver_rearm_rx(radio, cfg);
+    *last_rearm_ms = now;
+    ESP_LOGW(TAG, "chien de garde : radio %s réarmée (rien reçu depuis %lu ms)",
+             name, (unsigned long)(now - s_link[slot].last_rx_ms));
+}
+
 static void rf_rx_watchdog(uint32_t now)
 {
-    static uint32_t s_left_rearm_ms = 0, s_right_rearm_ms = 0;
-    if (s_left.present &&
-        (now - s_left_last_rx_ms) > RF_REARM_SILENCE_MS &&
-        (now - s_left_rearm_ms)   > RF_REARM_SILENCE_MS) {
-        rf_driver_rearm_rx(&s_left, &s_lcfg);
-        s_left_rearm_ms = now;
-        ESP_LOGW(TAG, "watchdog: re-armed LEFT radio (no rx %lu ms)",
-                 (unsigned long)(now - s_left_last_rx_ms));
-    }
-    if (s_right.present &&
-        (now - s_right_last_rx_ms) > RF_REARM_SILENCE_MS &&
-        (now - s_right_rearm_ms)   > RF_REARM_SILENCE_MS) {
-        rf_driver_rearm_rx(&s_right, &s_rcfg);
-        s_right_rearm_ms = now;
-        ESP_LOGW(TAG, "watchdog: re-armed RIGHT radio (no rx %lu ms)",
-                 (unsigned long)(now - s_right_last_rx_ms));
-    }
+    static uint32_t s_kbd_rearm_ms = 0, s_mouse_rearm_ms = 0;
+    rearm_if_silent(&s_kbd,   &s_kbd_cfg,   RF_SLOT_KBD,   &s_kbd_rearm_ms,   now, "clavier");
+    rearm_if_silent(&s_mouse, &s_mouse_cfg, RF_SLOT_MOUSE, &s_mouse_rearm_ms, now, "souris");
 }
 
 static void rf_rx_task(void *arg)
@@ -331,37 +329,25 @@ static void rf_rx_task(void *arg)
             continue;   /* skip normal RX/engine while pairing */
         }
 
-        bool changed = false;
-        if (s_left.present)  changed |= drain_radio(&s_left,  &s_hb_left,  HB_HALF_LEFT);
-        if (s_right.present) changed |= drain_radio(&s_right, &s_hb_right, HB_HALF_RIGHT);
+        if (s_kbd.present)   drain_radio(&s_kbd,   RF_SLOT_KBD);
+        if (s_mouse.present) drain_radio(&s_mouse, RF_SLOT_MOUSE);
 
         uint32_t now = esp_timer_get_time() / 1000;
-        bool was_up_left  = s_hb_left.link_up;
-        bool was_up_right = s_hb_right.link_up;
-        /* Perte de lien → relâcher tout sur l'hôte. hb_check_timeout() ne convient
-         * plus : il parcourait un bitmap de matrice qui n'existe plus ici, et
-         * n'aurait donc jamais rien relâché. On suit l'âge de réception. */
-        if (s_left_link_up && (now - s_left_last_rx_ms) > LINK_LOST_MS) {
-            s_left_link_up = false;
-            release_all_keys_on_host();
-            ESP_LOGW(TAG, "lien gauche perdu → toutes touches relâchées");
-        }
-        if (s_right_link_up && (now - s_right_last_rx_ms) > LINK_LOST_MS) {
-            s_right_link_up = false;
-            release_all_keys_on_host();
-            ESP_LOGW(TAG, "lien droit perdu → toutes touches relâchées");
-        }
-        /* Relay path: on link loss emit a zero keyboard report so no key sticks.
-         * Harmless on the raw-matrix path (engine will also release via MATRIX_STATE). */
-        if ((was_up_left  && !s_hb_left.link_up) ||
-            (was_up_right && !s_hb_right.link_up)) {
-            uint8_t z[6] = {0};
-            hid_send_keyboard(0, z);
-        }
-        rf_rx_watchdog(now);   /* self-heal a wedged NRF radio (no reboot) */
 
+        /* Perte de lien → repli, sur ce slot seulement. hb_check_timeout() ne
+         * convenait plus : il parcourait un bitmap de matrice qui n'existe plus
+         * ici, et n'aurait donc jamais rien relâché. */
+        rf_safe_action_t a_kbd =
+            rf_slot_link_check(&s_link[RF_SLOT_KBD], RF_SLOT_KBD, now, LINK_LOST_MS);
+        if (a_kbd != RF_SAFE_NONE) ESP_LOGW(TAG, "lien clavier perdu → touches relâchées");
+        apply_safe_action(a_kbd);
 
-        (void)changed;   /* plus de moteur à réveiller : le HID arrive déjà fini */
+        rf_safe_action_t a_mouse =
+            rf_slot_link_check(&s_link[RF_SLOT_MOUSE], RF_SLOT_MOUSE, now, LINK_LOST_MS);
+        if (a_mouse != RF_SAFE_NONE) ESP_LOGW(TAG, "lien souris perdu → boutons relâchés");
+        apply_safe_action(a_mouse);
+
+        rf_rx_watchdog(now);   /* réparer une radio figée, sans redémarrage */
     }
 }
 
@@ -372,8 +358,8 @@ bool rf_rx_start(void)
 #endif
     s_evt_sem = xSemaphoreCreateBinary();
 
-    rf_radio_cfg_t lcfg = board_rf_left_cfg();
-    rf_radio_cfg_t rcfg = board_rf_right_cfg();
+    rf_radio_cfg_t kcfg = board_rf_radio1_cfg();
+    rf_radio_cfg_t mcfg = board_rf_radio2_cfg();
 
     /* Per-set addressing (Plan RF-1): if this dongle is paired (NVS rf.paired_count
      * > 0), derive a unique address+channel from its own WiFi MAC. If unpaired,
@@ -391,9 +377,9 @@ bool rf_rx_start(void)
         set_id = rf_compute_set_id();
         ESP_LOGW(TAG, "no NVS pairs — using computed set_id 0x%04X for RX", set_id);
     }
-    rf_apply_set_id(&lcfg, set_id, 0x01);   /* left  → slot 0x01 */
-    rf_apply_set_id(&rcfg, set_id, 0x02);   /* right → slot 0x02 */
-    s_lcfg = lcfg; s_rcfg = rcfg;           /* keep live config for the radio watchdog */
+    rf_apply_set_id(&kcfg, set_id, 0x01);   /* clavier → slot 0x01 */
+    rf_apply_set_id(&mcfg, set_id, 0x02);   /* souris  → slot 0x02 */
+    s_kbd_cfg = kcfg; s_mouse_cfg = mcfg;   /* keep live config for the radio watchdog */
 
     /* Load paired peer MACs from NVS at boot: rf_rx_pair_start() alone used to
      * populate them, so a plain reboot left them zeroed until a re-pairing.
@@ -403,68 +389,71 @@ bool rf_rx_start(void)
 
     /* Park BOTH CSN HIGH before initialising either radio. The dongle shares
      * one SPI bus between NRF1 (csn=13) and NRF2 (csn=1 — a UART0 strap pin
-     * that floats LOW at reset). If RIGHT's CSN is still floating during
-     * rf_driver_init(LEFT), NRF2 will silently latch LEFT's SPI traffic in
+     * that floats LOW at reset). If NRF2's CSN is still floating during
+     * rf_driver_init(NRF1), NRF2 will silently latch NRF1's SPI traffic in
      * parallel, and the writes meant for NRF1 get corrupted by the parasitic
      * activity on the bus. Observed symptom: NRF1 boots with CONFIG=0x3E,
-     * EN_AA=0, EN_RXADDR=0 while NRF2 looks fine — verify_rx FAILs on LEFT.
+     * EN_AA=0, EN_RXADDR=0 while NRF2 looks fine — verify_rx FAILs on NRF1.
      * Pre-driving both CSN HIGH guarantees only one radio sees each command. */
     gpio_config_t csn_park = {
-        .pin_bit_mask = (1ULL << lcfg.pin_csn) | (1ULL << rcfg.pin_csn),
+        .pin_bit_mask = (1ULL << kcfg.pin_csn) | (1ULL << mcfg.pin_csn),
         .mode = GPIO_MODE_OUTPUT,
     };
     gpio_config(&csn_park);
-    gpio_set_level(lcfg.pin_csn, 1);
-    gpio_set_level(rcfg.pin_csn, 1);
+    gpio_set_level(kcfg.pin_csn, 1);
+    gpio_set_level(mcfg.pin_csn, 1);
 
-    rf_driver_init(&s_left, &lcfg);
-    rf_driver_verify_rx(&s_left, &lcfg);    /* read-back config check (logs OK / per-reg FAIL) */
-    rf_driver_init(&s_right, &rcfg);
-    rf_driver_verify_rx(&s_right, &rcfg);
+    rf_driver_init(&s_kbd, &kcfg);
+    rf_driver_verify_rx(&s_kbd, &kcfg);    /* read-back config check (logs OK / per-reg FAIL) */
+    rf_driver_init(&s_mouse, &mcfg);
+    rf_driver_verify_rx(&s_mouse, &mcfg);
 
-    if (!s_left.present && !s_right.present) {
-        ESP_LOGE(TAG, "no NRF radios present - RF disabled");
+    if (!s_kbd.present && !s_mouse.present) {
+        ESP_LOGE(TAG, "aucune radio NRF présente — RF désactivée");
         return false;
     }
 
     gpio_install_isr_service(0);
-    if (s_left.present) {
-        gpio_set_intr_type(lcfg.pin_irq, GPIO_INTR_NEGEDGE);
-        gpio_isr_handler_add(lcfg.pin_irq, nrf_irq_isr, &s_left);
-        rf_radio_set_irq_sem(&s_left, s_evt_sem);
+    if (s_kbd.present) {
+        gpio_set_intr_type(kcfg.pin_irq, GPIO_INTR_NEGEDGE);
+        gpio_isr_handler_add(kcfg.pin_irq, nrf_irq_isr, &s_kbd);
+        rf_radio_set_irq_sem(&s_kbd, s_evt_sem);
     }
-    if (s_right.present) {
-        gpio_set_intr_type(rcfg.pin_irq, GPIO_INTR_NEGEDGE);
-        gpio_isr_handler_add(rcfg.pin_irq, nrf_irq_isr, &s_right);
-        rf_radio_set_irq_sem(&s_right, s_evt_sem);
+    if (s_mouse.present) {
+        gpio_set_intr_type(mcfg.pin_irq, GPIO_INTR_NEGEDGE);
+        gpio_isr_handler_add(mcfg.pin_irq, nrf_irq_isr, &s_mouse);
+        rf_radio_set_irq_sem(&s_mouse, s_evt_sem);
     }
 
     xTaskCreatePinnedToCore(rf_rx_task, "rf_rx", 8192, NULL, 10, NULL, 0);
-    ESP_LOGI(TAG, "RF RX started (L=%d R=%d)", s_left.present, s_right.present);
+    ESP_LOGI(TAG, "RF RX démarrée (clavier=%d souris=%d)", s_kbd.present, s_mouse.present);
 
     return true;
 }
 
 void rf_rx_get_status(rf_link_status_t *out)
 {
+    /* L'âge rapporté est celui du dernier paquet reçu, pas du dernier battement :
+     * c'est ce que la tâche suit désormais, et un lien actif n'envoie plus de
+     * battements du tout (cf. la cadence adaptative, §5 du design du dongle). */
     uint32_t now = esp_timer_get_time() / 1000;
-    out->link_left  = s_hb_left.link_up;
-    out->link_right = s_hb_right.link_up;
-    out->hb_age_left_ms  = now - s_hb_left.last_hb_ms;
-    out->hb_age_right_ms = now - s_hb_right.last_hb_ms;
-    out->pkt_rx_left  = s_left.pkt_rx;
-    out->pkt_rx_right = s_right.pkt_rx;
-    out->pkt_dup_left  = s_left.pkt_dup;
-    out->pkt_dup_right = s_right.pkt_dup;
-    out->link_q_left  = s_link_q_left;
-    out->link_q_right = s_link_q_right;
+    out->link_kbd   = s_link[RF_SLOT_KBD].up;
+    out->link_mouse = s_link[RF_SLOT_MOUSE].up;
+    out->age_kbd_ms   = now - s_link[RF_SLOT_KBD].last_rx_ms;
+    out->age_mouse_ms = now - s_link[RF_SLOT_MOUSE].last_rx_ms;
+    out->pkt_rx_kbd   = s_kbd.pkt_rx;
+    out->pkt_rx_mouse = s_mouse.pkt_rx;
+    out->pkt_dup_kbd   = s_kbd.pkt_dup;
+    out->pkt_dup_mouse = s_mouse.pkt_dup;
+    out->link_q_kbd   = s_link_q[RF_SLOT_KBD];
+    out->link_q_mouse = s_link_q[RF_SLOT_MOUSE];
 }
 
-void rf_rx_copy_peer_macs(uint8_t mac_left[6], uint8_t mac_right[6])
+void rf_rx_copy_peer_macs(uint8_t mac_kbd[6], uint8_t mac_mouse[6])
 {
     /* Live copy maintained by this task (loaded at boot, refreshed on pairing). */
-    memcpy(mac_left,  s_pair_mac_left,  6);
-    memcpy(mac_right, s_pair_mac_right, 6);
+    memcpy(mac_kbd,   s_pair_mac_left,  6);
+    memcpy(mac_mouse, s_pair_mac_right, 6);
 }
 
 #endif /* TEST_HOST */

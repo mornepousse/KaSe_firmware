@@ -11,6 +11,7 @@
 #define PKT_TYPE_HEARTBEAT  0x2
 #define PKT_TYPE_TRACKPAD   0x3
 #define PKT_TYPE_HIDREPORT  0x5   /* keyboard-agnostic relay: final HID report */
+#define PKT_TYPE_STATUS     0x6   /* supervision du lien : batterie + qualité, sans état */
 #define PKT_TYPE_PAIR_ACK   0xE   /* dongle→half pairing ACK (RF-2) */
 #define PKT_TYPE_PAIR_REQ   0xF   /* half→dongle pairing request (RF-2) */
 
@@ -41,6 +42,27 @@ typedef struct {
     uint8_t link_q;    /* cumulative retries since last heartbeat */
     uint8_t seq;
 } rf_heartbeat_t;
+
+/* Supervision du lien clavier → dongle.
+ *
+ * Le design du dongle (docs/superpowers/specs/2026-08-19-dongle-role-niphargus-design.md,
+ * §5) sépare deux fonctions que rf_heartbeat_t mélangeait :
+ *
+ *   - la RÉPARATION d'état passe par la réémission de PKT_TYPE_HIDREPORT
+ *     lui-même, qui porte déjà l'état complet — inutile de l'emballer ailleurs ;
+ *   - la SUPERVISION passe par cette trame, qui ne porte aucun état.
+ *
+ * Elle existe surtout pour une raison logique : le dongle ne peut pas distinguer
+ * « elle ne tape pas » de « elle est morte » si elle se tait dans les deux cas.
+ * Elle part au repos, ~1 fois par seconde, sur une moitié à batterie : sa taille
+ * est une contrainte de conception. D'où 4 octets, contre 8 pour le heartbeat à
+ * bitmap — lequel reste utilisé sur le lien droite → gauche, où il y a une vraie
+ * matrice à réconcilier. */
+typedef struct {
+    uint8_t batt_dV;   /* 0..83 = 0..8,3 V ; 0 = inconnu */
+    uint8_t link_q;    /* retransmissions cumulées depuis la dernière trame */
+    uint8_t seq;
+} rf_status_t;
 
 typedef struct {
     uint8_t ge0, ge1;
@@ -101,6 +123,17 @@ static inline uint16_t rf_encode_pair_req(uint8_t *buf, const uint8_t mac[6], ui
     return 8;
 }
 
+/* PKT_STATUS: 4 octets — type 0x6, batterie, qualité de lien, seq. */
+static inline uint16_t rf_encode_status(uint8_t *buf, const rf_status_t *s)
+{
+    if (buf == NULL || s == NULL) return 0;
+    buf[0] = (PKT_TYPE_STATUS << 4);
+    buf[1] = s->batt_dV;
+    buf[2] = s->link_q;
+    buf[3] = s->seq;
+    return 4;
+}
+
 /* PKT_PAIR_ACK: 10 bytes — type 0xE, set_id big-endian, dongle MAC, slot. */
 static inline uint16_t rf_encode_pair_ack(uint8_t *buf, const rf_pair_ack_t *a)
 {
@@ -118,6 +151,16 @@ static inline uint8_t rf_packet_type(const uint8_t *buf, uint16_t len)
 {
     if (len < 1) return 0;
     return (buf[0] >> 4) & 0x0F;
+}
+
+static inline bool rf_decode_status(const uint8_t *buf, uint16_t len, rf_status_t *out)
+{
+    if (buf == NULL || out == NULL) return false;
+    if (len < 4 || rf_packet_type(buf, len) != PKT_TYPE_STATUS) return false;
+    out->batt_dV = buf[1];
+    out->link_q  = buf[2];
+    out->seq     = buf[3];
+    return true;
 }
 
 /* PKT_HIDREPORT: relay final HID reports over NRF24.

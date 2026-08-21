@@ -10,7 +10,7 @@
 #define RF_CH_LEFT_DEFAULT    0x4C   /* 2476 MHz */
 #define RF_CH_RIGHT_DEFAULT   0x52   /* 2482 MHz */
 
-static inline rf_radio_cfg_t board_rf_left_cfg(void)
+static inline rf_radio_cfg_t board_rf_radio1_cfg(void)
 {
     rf_radio_cfg_t c = {
         .spi_host = BOARD_NRF_SPI_HOST,
@@ -26,7 +26,7 @@ static inline rf_radio_cfg_t board_rf_left_cfg(void)
     return c;
 }
 
-static inline rf_radio_cfg_t board_rf_right_cfg(void)
+static inline rf_radio_cfg_t board_rf_radio2_cfg(void)
 {
     rf_radio_cfg_t c = {
         .spi_host = BOARD_NRF_SPI_HOST,

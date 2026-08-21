@@ -12,7 +12,7 @@
  *
  * Ne restent ici que trois choses qui ont encore un sens sur un répéteur :
  * le mode de sortie HID, la couche courante rapportée au moniteur, et le cache
- * des batteries des moitiés — la part « il sait et il rapporte » de son rôle.
+ * des batteries des deux slots — la part « il sait et il rapporte » de son rôle.
  */
 #include <stdint.h>
 #include <stdbool.h>
@@ -27,9 +27,14 @@ uint8_t usb_bl_state = 0;
  * que le logiciel de contrôle voie un champ cohérent. */
 uint8_t current_layout = 0;
 
-/* ── Cache des batteries des moitiés ──────────────────────────────────────
- * Alimenté par les heartbeats reçus, lu par la commande CDC BATTERY. C'est la
- * supervision : le dongle sait et rapporte, il ne décide de rien. */
+/* ── Cache des batteries des deux slots ───────────────────────────────────
+ * Indexé comme les slots RF : 0 = clavier, 1 = souris (comm/rf/rf_slot.h).
+ * Alimenté par la trame d'état reçue de chaque appareil, lu par la commande CDC
+ * BATTERY. C'est la supervision : le dongle sait et rapporte, il ne décide rien.
+ *
+ * La trame d'état ne porte que la tension — quatre octets était une contrainte
+ * de conception, pas un oubli. L'état de charge et la charge en cours restent
+ * donc à 0xFF « inconnu » plutôt que devinés. */
 typedef struct {
     uint8_t  batt_dV;     /* 0xFF = inconnu */
     uint8_t  soc_pct;     /* 0xFF = inconnu */

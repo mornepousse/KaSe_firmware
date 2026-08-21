@@ -8,8 +8,8 @@
 
 /* flags bitfield */
 #define KS_MON_F_HAS_RF   (1u << 0)
-#define KS_MON_F_LINK_L   (1u << 1)
-#define KS_MON_F_LINK_R   (1u << 2)
+#define KS_MON_F_LINK_KBD   (1u << 1)
+#define KS_MON_F_LINK_MOUSE   (1u << 2)
 #define KS_MON_F_USB      (1u << 3)
 #define KS_MON_F_BT_CONN  (1u << 4)
 
@@ -23,10 +23,10 @@ typedef struct {
     uint8_t  layer_idx;
     uint8_t  wpm;
     uint32_t keys_total;
-    uint8_t  sig_left, sig_right;
-    uint16_t hb_age_l_ms, hb_age_r_ms;
-    uint8_t  batt_l_dv, batt_l_soc, batt_l_chg;
-    uint8_t  batt_r_dv, batt_r_soc, batt_r_chg;
+    uint8_t  sig_kbd, sig_mouse;
+    uint16_t age_kbd_ms, age_mouse_ms;
+    uint8_t  batt_kbd_dv, batt_kbd_soc, batt_kbd_chg;
+    uint8_t  batt_mouse_dv, batt_mouse_soc, batt_mouse_chg;
     uint8_t  bt_slot;
 } ks_monitor_t;
 

@@ -23,10 +23,20 @@ set(srcs
     # Security confirmation gate — compiled for all roles (key_processor calls it)
     "security/sec_confirm.c"
 
-    # Board-specific keymap + layout (always provided per board)
-    "${BOARD_DIR}/board_keymap.c"
-    "${BOARD_DIR}/board_layout.c"
 )
+
+# Keymap et layout de la carte — sauf sur le dongle.
+#
+# Ils décrivaient une matrice 5×14 et une keymap de 70 touches sur un appareil
+# qui n'a aucun interrupteur : le vestige de l'architecture A. Le dongle ne
+# compile plus le moteur d'entrée ni le bloc CLAVIER du protocole CDC, donc plus
+# personne n'y référence keymaps[] ni default_layout_names[].
+if(NOT CONFIG_KASE_DEVICE_ROLE_DONGLE)
+    list(APPEND srcs
+        "${BOARD_DIR}/board_keymap.c"
+        "${BOARD_DIR}/board_layout.c"
+    )
+endif()
 
 # Moteur d'entrée — PAS sur le dongle.
 #
@@ -161,13 +171,18 @@ if(CONFIG_KASE_HAS_RF_RX)
     list(APPEND srcs
         "comm/rf/rf_driver.c"
         "comm/rf/rf_rx_task.c"
-        "comm/rf/heartbeat.c"
         "comm/rf/dongle_state.c"
         # Plus de mapping trackpad ici : la moitié gauche applique la gestuelle
         # elle-même (elle doit le faire pour fonctionner en USB sans dongle) et
         # envoie du HID souris déjà fini.
     )
 endif()
+
+# comm/rf/heartbeat.c n'est plus compilé nulle part : la réconciliation par
+# bitmap n'a plus lieu sur le dongle, qui ne décode plus aucune matrice. Le
+# module et ses tests host restent au dépôt parce que c'est exactement la logique
+# dont la moitié gauche aura besoin pour réconcilier la demi-matrice de la
+# droite, en phase 2 du Niphargus. Le supprimer serait à réécrire à l'identique.
 
 # Per-set NRF addressing + pairing (Plan RF-1/RF-2) — dongle RX side
 if(CONFIG_KASE_HAS_RF_RX)
