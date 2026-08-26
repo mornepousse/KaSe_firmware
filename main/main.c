@@ -150,6 +150,33 @@ void app_main(void) {
        Safe mode just skips display/BLE/NVS loading. */
   }
 
+  /* ── NVS, pour TOUS les rôles ────────────────────────────────────────────
+   *
+   * Elle n'était initialisée que par keymap_init_nvs(), dans input/keymap.c,
+   * derrière la garde du moteur keymap. Ni le dongle ni la souris ne compilent
+   * ce fichier — et hid_bluetooth_manager.c, l'autre appelant, pas davantage.
+   *
+   * Conséquence, constatée au banc le 2026-08-26 : le dongle répondait
+   * ESP_ERR_NVS_NOT_INITIALIZED (0x1101) à toute écriture. Il acquittait les
+   * demandes d'appairage sans jamais rien enregistrer, et n'avait aucun moyen
+   * de le dire — il tourne sans console en production. La souris présentait
+   * exactement le même symptôme, pour exactement la même raison.
+   *
+   * La NVS est de l'infrastructure : elle n'a rien à faire derrière une garde
+   * de rôle. keymap_init_nvs() reste appelée plus bas pour les rôles clavier ;
+   * un second nvs_flash_init() est sans effet. */
+  {
+    esp_err_t nvs = nvs_flash_init();
+    if (nvs == ESP_ERR_NVS_NO_FREE_PAGES || nvs == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_LOGW(TAG, "NVS a effacer et reinitialiser (%s)", esp_err_to_name(nvs));
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      nvs = nvs_flash_init();
+    }
+    if (nvs != ESP_OK)
+      ESP_LOGE(TAG, "NVS indisponible : %s — appairage et config ne seront pas "
+                    "persistes", esp_err_to_name(nvs));
+  }
+
   kase_tinyusb_init();
   init_cdc_commands();
 
@@ -190,12 +217,12 @@ void app_main(void) {
 #endif
   }
 
-#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
+#if !CONFIG_KASE_NO_KEYMAP_ENGINE
   keymap_init_nvs();
 #endif
 
   if (!safe_mode) {
-#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
+#if !CONFIG_KASE_NO_KEYMAP_ENGINE
     load_keymaps((uint16_t *)keymaps,
                  LAYERS * MATRIX_ROWS * MATRIX_COLS * sizeof(uint16_t));
     load_layout_names(default_layout_names, LAYERS);
@@ -216,7 +243,7 @@ void app_main(void) {
 #endif
   } else {
     ESP_LOGW(TAG, "Safe mode: skipping NVS config loading");
-#endif /* !CONFIG_KASE_DEVICE_ROLE_DONGLE */
+#endif /* !CONFIG_KASE_NO_KEYMAP_ENGINE */
   }
 
 #if CONFIG_KASE_DEVICE_ROLE_KEYBOARD
@@ -296,6 +323,20 @@ void app_main(void) {
     extern bool rf_rx_start(void);
     if (!rf_rx_start())
       ESP_LOGE(TAG, "RF RX failed to start (no radios?)");
+  }
+#elif CONFIG_KASE_DEVICE_ROLE_MOUSE
+  /* --- Rôle souris (Conchodytes) : capteur PMW3389, trois clics, molette. ---
+   *
+   * Ni matrice, ni keymap, ni écran, ni BLE : le CMakeLists ne compile aucun
+   * de ces modules pour ce rôle. La tâche ne produit pas encore de rapport
+   * HID — le relais vers le slot 2 du dongle est le jalon suivant, avec sa
+   * propre spec. */
+  ESP_LOGI(TAG, "Role souris : capteur + clics + molette");
+  {
+    extern esp_err_t mouse_task_start(void);
+    esp_err_t err = mouse_task_start();
+    if (err != ESP_OK)
+      ESP_LOGE(TAG, "mouse_task_start a echoue : %s", esp_err_to_name(err));
   }
 #endif /* device role */
 

@@ -52,10 +52,44 @@ static void spi_xfer(rf_radio_t *r, const uint8_t *tx, uint8_t *rx, size_t n)
     ESP_ERROR_CHECK(spi_device_polling_transmit(r->spi, &t));
 }
 
+/* Force le bus dans le mode SPI de CETTE radio, CSN encore HAUT.
+ *
+ * ⚠ À APPELER AVANT `csn_low()` DE TOUTE PREMIÈRE TRANSACTION D'UNE SÉQUENCE,
+ * dès que le bus est partagé avec un appareil d'un AUTRE mode SPI.
+ *
+ * Le nRF24 est en mode 0 : SCK au repos à l'état bas. Le PMW3389 de la souris
+ * est en mode 3 : SCK au repos à l'état HAUT. ESP-IDF ne reconfigure le bus
+ * qu'au démarrage de la transaction, donc APRÈS que l'appelant a déjà baissé
+ * CSN à la main (`spics_io_num = -1`). La radio voit alors son CSN descendre
+ * pendant que SCK est haut, puis encaisse le front de la bascule de mode : la
+ * commande entre décalée d'un bit et la puce exécute autre chose.
+ *
+ * Mesuré au banc le 2026-08-26 : dix W_TX_PAYLOAD d'affilée avant toute lecture
+ * capteur réussissent (TX_EMPTY=0, TX_DS), tandis que dans la boucle applicative
+ * — où chaque envoi suit une lecture capteur — la FIFO reste VIDE juste après
+ * l'écriture, le pulse CE émet dans le vide, et l'envoi finit sans TX_DS ni
+ * MAX_RT. `spi_device_acquire_bus()` ne corrige PAS ça : il sérialise les
+ * transactions, il ne change rien à l'instant de la bascule de mode.
+ *
+ * Une transaction d'un octet suffit à provoquer la reconfiguration ; elle part
+ * dans le vide puisque CSN est haut et que la puce ignore le bus. */
+static void spi_parquer_mode(rf_radio_t *r)
+{
+    uint8_t nop = CMD_NOP, jete;
+    csn_high(r);
+    spi_xfer(r, &nop, &jete, 1);
+}
+
+void rf_driver_set_retr(rf_radio_t *r, uint8_t setup_retr)
+{
+    rf_driver_write_reg(r, REG_SETUP_RETR, setup_retr);
+}
+
 uint8_t rf_driver_read_reg(rf_radio_t *r, uint8_t reg)
 {
     uint8_t tx[2] = { CMD_R_REGISTER(reg), CMD_NOP };
     uint8_t rx[2] = {0};
+    spi_parquer_mode(r);   /* voir spi_parquer_mode() : bus partage, modes differents */
     csn_low(r); spi_xfer(r, tx, rx, 2); csn_high(r);
     return rx[1];
 }
@@ -64,6 +98,7 @@ void rf_driver_write_reg(rf_radio_t *r, uint8_t reg, uint8_t val)
 {
     uint8_t tx[2] = { CMD_W_REGISTER(reg), val };
     uint8_t rx[2] = {0};
+    spi_parquer_mode(r);   /* voir spi_parquer_mode() : bus partage, modes differents */
     csn_low(r); spi_xfer(r, tx, rx, 2); csn_high(r);
 }
 
@@ -473,6 +508,7 @@ bool rf_driver_send(rf_radio_t *r, const uint8_t *buf, uint8_t len)
     uint8_t tx[33], rx_buf[33];
     tx[0] = CMD_W_TX_PAYLOAD;
     memcpy(&tx[1], buf, len);
+    spi_parquer_mode(r);   /* bascule de mode CSN HAUT — voir spi_parquer_mode() */
     csn_low(r);
     spi_xfer(r, tx, rx_buf, (size_t)(len + 1));
     csn_high(r);
@@ -483,8 +519,27 @@ bool rf_driver_send(rf_radio_t *r, const uint8_t *buf, uint8_t len)
     ce_low(r);
 
     /* Poll STATUS until TX_DS (bit5 = ACK received) or MAX_RT (bit4 = all retries failed).
-     * Worst-case time: ARC=3 retries × ARD=500 µs × 2 (on-air) ≈ 3 ms + margin → 5 ms. */
-    uint32_t deadline_us = (uint32_t)(esp_timer_get_time() + 5000);
+     *
+     * ⚠ LE DÉLAI SE DÉDUIT DU REGISTRE, IL N'EST PAS ÉCRIT EN DUR. Il l'était
+     * — 5 ms, dimensionnés sur « ARC=3 » — alors que `rf_driver_init_*` écrit
+     * SETUP_RETR = 0x1F, soit ARC=15. Un abandon prématuré est SILENCIEUX et
+     * TROMPEUR : la boucle rend la main avant que la puce ait fini, le code
+     * conclut à l'échec, puis efface STATUS (bits 0x30) plus bas — ce qui
+     * DÉTRUIT le TX_DS qui arrivait. Une émission réussie est alors comptée en
+     * échec, et rien dans les compteurs ne permet de s'en apercevoir.
+     *
+     * Mesuré au banc le 2026-08-26 sur la Conchodytes : 639 émissions finies ni
+     * sur TX_DS ni sur MAX_RT, PLOS_CNT resté à 0 (donc AUCUN MAX_RT n'a jamais
+     * eu lieu) et OBSERVE_TX à ARC_CNT=2 (donc les retransmissions marchaient).
+     *
+     * Pire cas par tentative = ARD + trame + ACK. ARD = (SETUP_RETR>>4)+1 fois
+     * 250 µs ; trame ~6 octets + adresse + CRC et son ACK ≈ 250 µs à 1 Mbit/s,
+     * arrondi large. Nombre de tentatives = 1 + ARC. */
+    uint8_t retr = rf_driver_read_reg(r, REG_SETUP_RETR);
+    uint32_t ard_us  = (uint32_t)(((retr >> 4) & 0x0F) + 1) * 250u;
+    uint32_t essais  = (uint32_t)(retr & 0x0F) + 1u;
+    uint32_t budget  = essais * (ard_us + 250u) + 1000u;   /* + 1 ms de marge */
+    uint32_t deadline_us = (uint32_t)(esp_timer_get_time() + budget);
     uint8_t status;
     do {
         status = rf_driver_read_reg(r, REG_STATUS);

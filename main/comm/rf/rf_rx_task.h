@@ -23,6 +23,15 @@ typedef struct {
      * (conservateur = meilleur score de retransmission). */
     uint8_t link_q_kbd;
     uint8_t link_q_mouse;
+    /* Présence PHYSIQUE des deux modules nRF24, telle que le probe SPI l'a
+     * établie au démarrage. Distincte de l'état du lien : une radio présente
+     * peut n'avoir aucun pair, mais une radio ABSENTE n'écoutera jamais rien.
+     *
+     * Sans cette information, un dongle dont la radio 2 n'est pas montée est
+     * indiscernable d'un dongle dont la souris est hors de portée — et la
+     * souris, elle, émet dans le vide sans que rien ne le dise. */
+    bool radio_kbd_present;
+    bool radio_mouse_present;
 } rf_link_status_t;
 
 void rf_rx_get_status(rf_link_status_t *out);

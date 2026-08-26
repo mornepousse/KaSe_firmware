@@ -31,7 +31,10 @@ set(srcs
 # qui n'a aucun interrupteur : le vestige de l'architecture A. Le dongle ne
 # compile plus le moteur d'entrée ni le bloc CLAVIER du protocole CDC, donc plus
 # personne n'y référence keymaps[] ni default_layout_names[].
-if(NOT CONFIG_KASE_DEVICE_ROLE_DONGLE)
+# La souris est exclue pour la meme raison que le dongle : elle n'a aucun
+# interrupteur en matrice. Ses trois clics sont lus individuellement par paires
+# NO+NC, et boards/conchodytes/board.h ne declare donc ni ROWSn ni COLSn.
+if(NOT CONFIG_KASE_NO_KEYMAP_ENGINE)
     list(APPEND srcs
         "${BOARD_DIR}/board_keymap.c"
         "${BOARD_DIR}/board_layout.c"
@@ -46,7 +49,7 @@ endif()
 # donc le dongle n'a plus rien à calculer — et surtout, l'exclure d'ici rend
 # structurellement impossible l'existence de deux moteurs keymap dans le système,
 # question qui s'est reposée trois fois en deux mois.
-if(NOT CONFIG_KASE_DEVICE_ROLE_DONGLE)
+if(NOT CONFIG_KASE_NO_KEYMAP_ENGINE)
     list(APPEND srcs
         "input/key_processor.c"
         "input/tap_hold.c"
@@ -161,8 +164,11 @@ if(CONFIG_KASE_DEVICE_ROLE_DONGLE)
     endif()
 endif()
 
-# Bouchons CDC du rôle esclave Niphargus (pas de display, pas de BLE)
-if(CONFIG_KASE_DEVICE_ROLE_NIPHAR_SLAVE)
+# Bouchons CDC des rôles sans écran ni BLE ni moteur keymap : l'esclave
+# Niphargus et la souris Conchodytes ont exactement les mêmes trous, donc le
+# même fichier de bouchons. Le nom du fichier ne mentionne que le premier des
+# deux — voir son en-tête.
+if(CONFIG_KASE_DEVICE_ROLE_NIPHAR_SLAVE OR CONFIG_KASE_DEVICE_ROLE_MOUSE)
     list(APPEND srcs "comm/cdc/cdc_niphar_slave_stubs.c")
 endif()
 
@@ -187,6 +193,40 @@ endif()
 # Per-set NRF addressing + pairing (Plan RF-1/RF-2) — dongle RX side
 if(CONFIG_KASE_HAS_RF_RX)
     list(APPEND srcs "comm/rf/rf_pairing.c")
+endif()
+
+# Capteur optique PMW3389 — rôle souris uniquement.
+#
+# pmw3389_srom.c est le FIRMWARE de la puce, 4094 octets téléversés à chaque
+# démarrage. Il n'a de sens que sur une carte qui porte le capteur, d'où le
+# symbole dédié plutôt qu'une compilation inconditionnelle.
+if(CONFIG_KASE_HAS_MOUSE_SENSOR)
+    list(APPEND srcs
+        "periph/pmw3389.c"
+        "periph/pmw3389_srom.c"
+    )
+endif()
+
+# Entrées de la souris : trois clics SPDT lus par paires NO+NC, encodeur de
+# molette en quadrature, et la tâche qui les assemble avec le capteur.
+if(CONFIG_KASE_DEVICE_ROLE_MOUSE)
+    list(APPEND srcs
+        "input/mouse_buttons.c"
+        "input/mouse_wheel.c"
+        "app/mouse_task.c"
+        "comm/cdc/cdc_mouse_stubs.c"
+        "comm/rf/mouse_relay_tx.c"
+    )
+endif()
+
+# Pile radio en émission — la souris et, historiquement, le clavier sans fil.
+# rf_driver.c et rf_pairing.c sont déjà tirés par CONFIG_KASE_KBD_WIRELESS ;
+# la garde ci-dessous évite de les lister deux fois.
+if(CONFIG_KASE_HAS_RF_TX AND NOT CONFIG_KASE_KBD_WIRELESS)
+    list(APPEND srcs
+        "comm/rf/rf_driver.c"
+        "comm/rf/rf_pairing.c"
+    )
 endif()
 
 # NRF line short-circuit bring-up diagnostic — only when explicitly enabled

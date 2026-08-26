@@ -68,6 +68,10 @@ add_executable(test_runner
     ../main/display/oled/oled_nav.c
     test_niphar_left_pins.c
     test_niphar_right_pins.c
+    test_conchodytes_pins.c
+    test_mouse_input.c
+    ../main/input/mouse_buttons.c
+    ../main/input/mouse_wheel.c
     test_hid_dedup.c
     test_oled_stats.c
     ../main/display/oled/oled_stats.c

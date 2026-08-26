@@ -60,7 +60,7 @@ dependencies:
   espressif/keyboard_button:
     dependencies: []
     source:
-      path: /home/mae/Documents/GitHub/KaSe_firmware/components/espressif__keyboard_button
+      path: /home/mae/Documents/GitHub/KeSp_firmware-gitlab/components/espressif__keyboard_button
       type: local
     version: 1.0.0
   espressif/led_strip:

@@ -10,6 +10,9 @@ choice KASE_DEVICE_ROLE
         NIPHAR_SLAVE = Niphargus right half: local matrix + Sharp LCD, no
                         keymap engine, no HID output (see KASE_NIPHAR_MASTER
                         for the left/master half, which reuses KEYBOARD).
+        MOUSE        = souris Conchodytes : capteur PMW3389, trois clics et une
+                        molette, rapports HID souris relayés au slot 2 du
+                        dongle. Aucune matrice, aucune keymap, aucun écran.
 
 config KASE_DEVICE_ROLE_KEYBOARD
     bool "Keyboard (V1/V2/V2D)"
@@ -20,7 +23,51 @@ config KASE_DEVICE_ROLE_DONGLE
 config KASE_DEVICE_ROLE_NIPHAR_SLAVE
     bool "Niphargus right half (slave: matrix + Sharp LCD, no keymap engine)"
 
+config KASE_DEVICE_ROLE_MOUSE
+    bool "Souris Conchodytes (capteur PMW3389 + clics, relais HID vers le slot 2)"
+
 endchoice
+
+config KASE_HAS_MOUSE_SENSOR
+    bool
+    default y if KASE_DEVICE_ROLE_MOUSE
+    default n
+    help
+        Compile le driver PMW3389 (main/periph/pmw3389.c) et son blob SROM.
+
+        Le blob fait 4 Ko de rodata à lui seul et n'a de sens que sur une carte
+        qui porte le capteur — d'où ce symbole plutôt qu'une compilation
+        inconditionnelle. Il est téléversé dans la puce à chaque démarrage :
+        c'est le firmware du capteur, pas une table de données.
+
+        ⚠ Le blob du PMW3389 n'est PAS celui du PMW3360 (99,6 % des octets
+        diffèrent). Les intervertir revient à charger le firmware d'une autre
+        puce dans le capteur.
+
+config KASE_NO_KEYMAP_ENGINE
+    bool
+    default y if KASE_DEVICE_ROLE_DONGLE
+    default y if KASE_DEVICE_ROLE_MOUSE
+    default n
+    help
+        Vrai pour les rôles SANS matrice de touches : le dongle, qui reçoit du
+        HID déjà fini, et la souris Conchodytes, qui n'a que trois clics lus
+        individuellement. Ni keycodes, ni calques, ni statistiques par position,
+        ni bloc CLAVIER du protocole CDC.
+
+        ⚠ CE SYMBOLE EST NÉGATIF À DESSEIN. Ne pas le retourner en
+        KASE_HAS_KEYMAP_ENGINE : un booléen Kconfig à `n` est ABSENT de
+        sdkconfig.h, exactement comme sur le harnais de test hôte, où aucun
+        CONFIG_* n'existe. Le préprocesseur ne peut pas distinguer les deux.
+
+        Avec la forme négative, `#if !CONFIG_KASE_NO_KEYMAP_ENGINE` vaut vrai
+        quand le symbole est absent — donc sur l'hôte ET sur toute cible à
+        clavier, ce qui est le bon défaut dans les deux cas. Avec la forme
+        positive, l'hôte croirait n'avoir aucun moteur keymap et
+        input/key_processor.c ne compilerait plus. C'est arrivé le 2026-08-25.
+
+        Il remplace la liste `!DONGLE && !MOUSE` qui était dispersée dans sept
+        fichiers ; un troisième rôle sans clavier ne touche que ce `default`.
 
 config KASE_HAS_LOCAL_MATRIX
     bool
@@ -112,6 +159,19 @@ config KASE_VBUS_SENSE
       plugged-in without any extra wiring, but unplug detection is unreliable on
       the ESP32-S3 (TinyUSB may not see the disconnect), so it can stay on USB
       after unplug. Flip ON once the GPIO33 divider is soldered.
+
+config KASE_HAS_RF_TX
+    bool
+    default y if KASE_DEVICE_ROLE_MOUSE
+    default n
+    help
+        Compile le mode ÉMETTEUR (PTX) du driver nRF24 : rf_driver_init_tx,
+        rf_driver_send, et l'échange d'appairage hors bande.
+
+        Ce symbole était référencé par comm/rf/rf_driver.h sans avoir jamais
+        été déclaré — seul KASE_KBD_WIRELESS ouvrait le bloc PTX. Le déclarer
+        ici donne à la souris le même accès sans passer par un symbole dont
+        l'intitulé parle de clavier.
 
 config KASE_HAS_RF_RX
     bool

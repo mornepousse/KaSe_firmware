@@ -258,10 +258,29 @@ static bool rf_rx_pairing_service(void)
             if (!rf_pairing_resolve_slot(declared_slot, s_pair_paired_count, &slot)) continue; /* full */
         }
 
-        /* Persist (new pairings only bump count). */
+        /* Persist (new pairings only bump count).
+         *
+         * ⚠ NE PAS ACQUITTER UN APPAIRAGE QU'ON N'A PAS SU ENREGISTRER.
+         *
+         * Le retour de rf_pairing_save_peer_dongle() était ignoré ici. Constaté
+         * au banc le 2026-08-26 avec la souris Conchodytes : la NVS du dongle
+         * refusait ses écritures, l'ACK partait quand même, et le périphérique
+         * repartait convaincu d'être appairé — set_id et slot enregistrés de son
+         * côté — pendant que le dongle n'en gardait aucune trace et continuait
+         * d'écouter le rendez-vous. Les deux émettaient sur des adresses
+         * différentes, zéro paquet passait, et RIEN ne le signalait.
+         *
+         * Un échec bruyant vaut mieux qu'un appairage fantôme : sans ACK, le
+         * périphérique réessaie puis abandonne en le disant. */
         if (!is_dup) {
             uint8_t new_count = s_pair_paired_count + 1;
-            rf_pairing_save_peer_dongle(slot, mac, new_count);
+            esp_err_t err = rf_pairing_save_peer_dongle(slot, mac, new_count);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "appairage NON enregistre (slot=0x%02X) : %s "
+                              "— pas d'ACK, la NVS du dongle est en echec",
+                         slot, esp_err_to_name(err));
+                continue;   /* pas d'ACK : voir le commentaire ci-dessus */
+            }
             if (slot == 0x01) memcpy(s_pair_mac_left,  mac, 6);
             else              memcpy(s_pair_mac_right, mac, 6);
             s_pair_paired_count = new_count;
@@ -320,7 +339,20 @@ static void rf_rx_watchdog(uint32_t now)
 static void rf_rx_task(void *arg)
 {
     (void)arg;
-    const TickType_t tick_period = pdMS_TO_TICKS(10);
+    /* ⚠ ÉTAIT À 10 ms. Ce n'est en principe qu'un repli — l'IRQ de chaque radio
+     * réveille `s_evt_sem` (voir nrf_irq_isr) — mais dans les faits c'est lui qui
+     * gouvernait, et il PLAFONNE LE DÉBIT : la FIFO de réception d'un nRF24 ne
+     * tient que 3 paquets, et un paquet arrivant FIFO pleine n'est pas acquitté,
+     * donc perdu. Trois paquets par réveil, c'est 300/s au mieux.
+     *
+     * Invisible avec un clavier, qui produit quelques événements par seconde.
+     * Une souris émet à 1 kHz PENDANT LES GESTES. Mesuré au banc le 2026-08-26 :
+     * 8356 trames émises, 3135 acceptées — 37,5 %, très exactement les 3 sur 10
+     * que laisse passer une fenêtre de 10 ms.
+     *
+     * 1 ms porte le plafond à ~3000/s. Le dongle est alimenté par l'USB : un
+     * réveil par milliseconde ne coûte rien ici, contrairement au côté souris. */
+    const TickType_t tick_period = pdMS_TO_TICKS(1);
     for (;;) {
         xSemaphoreTake(s_evt_sem, tick_period);
 
@@ -447,6 +479,8 @@ void rf_rx_get_status(rf_link_status_t *out)
     out->pkt_dup_mouse = s_mouse.pkt_dup;
     out->link_q_kbd   = s_link_q[RF_SLOT_KBD];
     out->link_q_mouse = s_link_q[RF_SLOT_MOUSE];
+    out->radio_kbd_present   = s_kbd.present;
+    out->radio_mouse_present = s_mouse.present;
 }
 
 void rf_rx_copy_peer_macs(uint8_t mac_kbd[6], uint8_t mac_mouse[6])

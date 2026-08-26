@@ -44,6 +44,8 @@ extern void test_cfg_bridge(void);
 extern void test_kbd_route(void);
 extern void test_niphar_left_pins(void);
 extern void test_niphar_right_pins(void);
+extern void test_conchodytes_pins(void);
+extern void test_mouse_input(void);
 extern void test_hid_dedup(void);
 extern void test_oled_stats(void);
 extern void test_link_frame(void);
@@ -91,6 +93,8 @@ int main(void) {
     test_kbd_route();
     test_niphar_left_pins();
     test_niphar_right_pins();
+    test_conchodytes_pins();
+    test_mouse_input();
     test_hid_dedup();
     test_oled_stats();
     test_link_frame();

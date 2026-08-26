@@ -44,6 +44,20 @@ uint16_t rf_driver_read_rx(rf_radio_t *radio, uint8_t *buf, uint16_t maxlen);
 bool rf_driver_rx_available(rf_radio_t *radio);
 
 /* Register access (exposed for probe/diagnostics). */
+/* Règle SETUP_RETR (0x04) : quartet haut = ARD, pas de 250 µs moins un ;
+ * quartet bas = ARC, nombre de retransmissions.
+ *
+ * ⚠ Le pilote initialise 0x1F (ARD=500 µs, ARC=15), taillé pour le CLAVIER dont
+ * l'état est ABSOLU : réémettre une frappe perdue est toujours juste, et attendre
+ * en vaut la peine. Pour un déplacement RELATIF c'est l'inverse — la trame de
+ * remplacement arrive avant que la retransmission n'aboutisse, et pendant ce
+ * temps `rf_driver_send()` bloque son appelant.
+ *
+ * `rf_driver_send()` déduit son délai de scrutation de ce registre : le baisser
+ * raccourcit l'attente automatiquement, il n'y a pas de seconde constante à
+ * garder en phase. */
+void rf_driver_set_retr(rf_radio_t *radio, uint8_t setup_retr);
+
 uint8_t rf_driver_read_reg(rf_radio_t *radio, uint8_t reg);
 void    rf_driver_write_reg(rf_radio_t *radio, uint8_t reg, uint8_t val);
 

@@ -81,7 +81,7 @@ static void bin_cmd_dfu(uint8_t cmd, const uint8_t *p, uint16_t l)
  * un moteur qu'il ne fait pas tourner. C'est cette dépendance-là qu'on coupe :
  * une carte ne doit pas avoir à mentir sur son matériel pour que le firmware
  * compile. */
-#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
+#if !CONFIG_KASE_NO_KEYMAP_ENGINE
 
 /* ── Keymap ─────────────────────────────────────────────────────── */
 
@@ -883,7 +883,7 @@ static void bin_cmd_layout_json(uint8_t cmd, const uint8_t *p, uint16_t l)
     ks_respond_end();
 }
 
-#endif /* !CONFIG_KASE_DEVICE_ROLE_DONGLE — fin du bloc clavier */
+#endif /* !CONFIG_KASE_NO_KEYMAP_ENGINE — fin du bloc clavier */
 
 /* ── OTA ────────────────────────────────────────────────────────── */
 
@@ -955,7 +955,7 @@ static void bin_cmd_ota_abort(uint8_t cmd, const uint8_t *p, uint16_t l)
 }
 
 /* ── Test matrice — pas de matrice sur le dongle ───────────────── */
-#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
+#if !CONFIG_KASE_NO_KEYMAP_ENGINE
 
 /* MATRIX_TEST: toggle test mode on/off.
    When ON: scan callback sends KR [0xB0] [row,col,state] on each change.
@@ -971,7 +971,7 @@ static void bin_cmd_matrix_test(uint8_t cmd, const uint8_t *p, uint16_t l)
     uint8_t resp[3] = { matrix_test_mode ? 1 : 0, MATRIX_ROWS, MATRIX_COLS };
     ks_respond(cmd, KS_STATUS_OK, resp, 3);
 }
-#endif /* !CONFIG_KASE_DEVICE_ROLE_DONGLE */
+#endif /* !CONFIG_KASE_NO_KEYMAP_ENGINE */
 
 /* NVS_RESET: erase all saved config, reboot with defaults.
    Payload [mask:u8]:
@@ -1114,7 +1114,7 @@ static const ks_bin_cmd_entry_t bin_cmd_table[] = {
      * de faire semblant, on ne les enregistre pas : le dispatcher répond alors
      * KS_STATUS_ERR_UNKNOWN, ce qui dit franchement au logiciel de contrôle que
      * cet appareil ne fait pas ça. Un rejet muet serait pire que le défaut. */
-#if !CONFIG_KASE_DEVICE_ROLE_DONGLE
+#if !CONFIG_KASE_NO_KEYMAP_ENGINE
     /* Keymap */
     { KS_CMD_LAYER_INDEX,       bin_cmd_layer_index },
     { KS_CMD_KEYMAP_CURRENT,    bin_cmd_keymap_get },
@@ -1183,7 +1183,7 @@ static const ks_bin_cmd_entry_t bin_cmd_table[] = {
      * plus, et la moitié gauche qui le fera n'existe pas encore en matériel.
      * Elles reviendront avec le driver trackpad, en phase 2 — les réenregistrer
      * maintenant reviendrait à annoncer une fonction sans implémentation. */
-#endif /* !CONFIG_KASE_DEVICE_ROLE_DONGLE */
+#endif /* !CONFIG_KASE_NO_KEYMAP_ENGINE */
     /* Diagnostics */
     { KS_CMD_NVS_RESET,         bin_cmd_nvs_reset },
     { KS_CMD_MONITOR,           bin_cmd_monitor },

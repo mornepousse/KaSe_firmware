@@ -50,6 +50,7 @@ uint8_t rf_derive_wifi_ch(uint16_t set_id);
  * Legacy 8-byte halves (rf_encode_pair_req) are treated as DUMB_HALF. */
 #define RF_DEV_DUMB_HALF  0   /* sends raw matrix; HID engine runs on dongle */
 #define RF_DEV_SMART_KBD  1   /* sends final HID reports over NRF */
+#define RF_DEV_MOUSE      2   /* souris Conchodytes : rapports HID souris, slot 2 */
 
 /* Positional slot assignment (spec §3.4). paired_count 0→0x01, 1→0x02.
  * Returns false (window full) when paired_count >= 2. Pure. */
