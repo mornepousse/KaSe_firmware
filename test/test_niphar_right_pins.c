@@ -42,6 +42,7 @@
 #endif
 
 #include "../boards/niphar_right/board.h"
+#include "../main/comm/rf/rf_packet.h"
 
 /* Garde de compilation : le trackpad est GAUCHE uniquement (Azoteq TPS43,
  * I2C + RDY, cf. docs/NIPHARGUS_V2_HARDWARE.md). Une macro
@@ -215,6 +216,27 @@ static void test_right_radio_pin_aliases(void)
     TEST_ASSERT_EQ(BOARD_NRF_IRQ_GPIO, BOARD_NRF_IRQ,  "alias IRQ  == pin brute");
 }
 
+/* La geometrie de demi-matrice du protocole RF doit correspondre a celle du
+ * board. rf_packet.h le dit lui-meme — « must match board.h half dimensions » —
+ * mais rien ne le verifiait, et la valeur y est restee celle des anciennes
+ * moities KaSe (5x7), retirees du depot au commit c107df77. Elle decrivait donc
+ * du materiel qui n'existe plus.
+ *
+ * Consequences concretes : un octet de bitmap gaspille par paquet, et une
+ * validation `row < RF_HALF_ROWS` qui accepterait une ligne 4 inexistante sur
+ * une matrice 4x7. Sans impact vivant tant que heartbeat.c n'est pas compile,
+ * mais B3 va s'appuyer sur ce contrat — mieux vaut le rendre vrai avant.
+ *
+ * Ce test lie les deux : toute divergence future casse ici. */
+static void test_right_rf_geometry_matches_board(void)
+{
+    TEST_ASSERT_EQ(RF_HALF_ROWS, MATRIX_ROWS, "geometrie RF : lignes == board.h");
+    TEST_ASSERT_EQ(RF_HALF_COLS, MATRIX_COLS, "geometrie RF : colonnes == board.h");
+    /* Le bitmap doit couvrir exactement la matrice, sans octet mort. */
+    TEST_ASSERT_EQ(RF_HALF_BITMAP_BYTES, (MATRIX_ROWS * MATRIX_COLS + 7) / 8,
+                   "bitmap = ceil(lignes*colonnes/8)");
+}
+
 void test_niphar_right_pins(void)
 {
     printf("\n-- brochage Niphargus DROITE (contrat netlist 2026-08-06) --\n");
@@ -227,4 +249,5 @@ void test_niphar_right_pins(void)
     test_right_no_pin_used_twice();
     test_right_does_not_swap_the_link_uart();
     test_right_radio_pin_aliases();
+    test_right_rf_geometry_matches_board();
 }

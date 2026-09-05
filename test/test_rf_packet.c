@@ -37,16 +37,16 @@ static void test_rf_heartbeat_roundtrip(void)
     uint8_t buf[32];
     rf_heartbeat_t h;
     memset(&h, 0, sizeof(h));
-    rf_bitmap_set(h.bitmap, 4, 6, true);   /* last key of the half */
+    rf_bitmap_set(h.bitmap, 3, 6, true);   /* derniere touche de la moitie (4x7) */
     rf_bitmap_set(h.bitmap, 0, 0, true);
     h.batt_dV = 74; h.link_q = 2; h.seq = 7;
 
     uint16_t n = rf_encode_heartbeat(buf, &h);
-    TEST_ASSERT_EQ(n, 9, "heartbeat encode length");
+    TEST_ASSERT_EQ(n, 8, "heartbeat encode length");   /* 4 + bitmap 4 octets */
 
     rf_heartbeat_t hd;
     TEST_ASSERT(rf_decode_heartbeat(buf, n, &hd), "hb decode ok");
-    TEST_ASSERT(rf_bitmap_get(hd.bitmap, 4, 6), "hb bit 4,6");
+    TEST_ASSERT(rf_bitmap_get(hd.bitmap, 3, 6), "hb bit 3,6");
     TEST_ASSERT(rf_bitmap_get(hd.bitmap, 0, 0), "hb bit 0,0");
     TEST_ASSERT(!rf_bitmap_get(hd.bitmap, 2, 3), "hb bit 2,3 clear");
     TEST_ASSERT_EQ(hd.batt_dV, 74, "hb batt");

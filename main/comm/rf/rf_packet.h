@@ -23,13 +23,24 @@
 #define PKT_FLAG_PRESSED    0x01   /* PKT_KEY: key is pressed (vs released) */
 #define PKT_FLAG_IS_RETRY   0x02   /* application-level retransmit */
 
-/* Matrix geometry per half (must match board.h half dimensions) */
-#define RF_HALF_ROWS         5
+/* Géométrie de demi-matrice du protocole. DOIT correspondre aux dimensions des
+ * board.h Niphargus — lien assuré par test/test_niphar_right_pins.c, qui inclut
+ * les deux et casse à la moindre divergence.
+ *
+ * Valait 5 lignes jusqu'au 2026-09-05 : c'était la géométrie des anciennes
+ * moitiés KaSe, retirées du dépôt au commit c107df77. Elle décrivait donc du
+ * matériel qui n'existait plus, gaspillait un octet de bitmap par paquet, et
+ * aurait laissé passer une ligne 4 inexistante sur une matrice 4×7.
+ *
+ * ⚠ Changer ces valeurs change un FORMAT DE TRAME : rf_encode_heartbeat passe
+ * de 9 à 8 octets et LINK_PAYLOAD_MATRIX de 7 à 6. Les deux bouts doivent être
+ * reflashés ensemble. */
+#define RF_HALF_ROWS         4
 #define RF_HALF_COLS         7
-#define RF_HALF_BITMAP_BYTES 5     /* ceil(5*7 / 8) = 5 */
+#define RF_HALF_BITMAP_BYTES 4     /* ceil(4*7 / 8) = 4 */
 
 typedef struct {
-    uint8_t row;       /* 0..4 */
+    uint8_t row;       /* 0..3 */
     uint8_t col;       /* 0..6 (local to the half) */
     bool    pressed;
     bool    is_retry;
@@ -204,7 +215,11 @@ static inline bool rf_decode_key(const uint8_t *buf, uint16_t len, rf_key_event_
 
 static inline bool rf_decode_heartbeat(const uint8_t *buf, uint16_t len, rf_heartbeat_t *h)
 {
-    if (len < 9 || rf_packet_type(buf, len) != PKT_TYPE_HEARTBEAT) return false;
+    /* Longueur derivee du symbole, pas ecrite en dur : elle valait 9 quand le
+     * bitmap faisait 5 octets, et le passage a 4 l'a rendue fausse en silence
+     * (le decodeur refusait toutes les trames que l'encodeur produisait). */
+    if (len < 4 + RF_HALF_BITMAP_BYTES ||
+        rf_packet_type(buf, len) != PKT_TYPE_HEARTBEAT) return false;
     memcpy(h->bitmap, &buf[1], RF_HALF_BITMAP_BYTES);
     h->batt_dV = buf[1 + RF_HALF_BITMAP_BYTES];
     h->link_q  = buf[2 + RF_HALF_BITMAP_BYTES];
