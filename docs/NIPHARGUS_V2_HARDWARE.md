@@ -47,12 +47,37 @@ U6 = gauche (feuille `s3`), U5 = droite (feuille `right`). Nets de la droite suf
 | LINK_TX / LINK_RX (TRRS) | 17 / 18 | UART1. **Câble droit : TX arrive sur TX** → UNE moitié doit échanger TXD/RXD via la matrice GPIO. Ne jamais driver les deux TX sans ce swap |
 | USB D− / D+ | 19 / 20 | natif |
 | LINK_5V_EN | 21 | ON du SiP32431 (pull-down 100k = 5 V mort par défaut). Poignée de main : l'émetteur ET le récepteur doivent activer leur switch pour transférer du 5 V ; une moitié à batterie morte n'est pas réveillable par le TRRS (assumé) |
-| SPI partagé SCK / MISO / MOSI | 38 / 39 / 40 | nRF24 + écran (écran write-only) |
+| SPI partagé SCK / MISO / MOSI | 38 / 39 / 40 | nRF24 + écran (écran write-only) + **ESP32-P4 (Niphar_chest)** — voir ci-dessous |
 | nRF24 IRQ | 41 | |
 | TP_RDY | 42 | trackpad, gauche seulement (labels en attente à droite) |
 | I2C trackpad SDA / SCL | 47 / 48 | pull-ups 4,7k ; gauche seulement. NRST du trackpad = RC matériel, pas de GPIO |
 | Prog | 0, 43 (TX0), 44 (RX0) | connecteur 6 pins type ESP-Prog par moitié (EN/3V3/TX/GND/RX/IO0) |
 | Interdits | 3, 45, 46, 35-37 | strapping / PSRAM octale — non câblés |
+
+## ⚠ Le bus SPI porte un troisième participant : l'ESP32-P4
+
+> **Ajouté le 2026-09-05, après un diagnostic d'une heure.**
+
+Une carte **ESP32-P4** (projet Niphar_chest) est raccordée au bus SPI partagé de
+la moitié gauche — SCK/MISO/MOSI sur GPIO 38/39/40. Ce document ne la mentionnait
+nulle part, et son absence a coûté cher : un P4 **non programmé** tient ces trois
+lignes, la nRF24 devient muette, et le diagnostic accuse successivement le module
+radio, un court-circuit mécanique, puis la PSRAM octale avant de trouver la cause.
+
+Signature du défaut, si ça se reproduit : les **trois lignes partagées** lisent
+`CLOUÉE À LA MASSE` au test de lignes (`CONFIG_KASE_NRF_PROBE`), pendant que
+**CSN, CE et IRQ restent libres** — ces trois-là sont propres à la radio, le P4
+n'y touche pas. Aucun pont entre elles : chacune est tirée séparément, par le
+même composant à l'autre bout.
+
+Conséquences de conception, non traitées à ce jour :
+
+- **Trois esclaves sur un bus, chacun son CS.** Le P4 doit impérativement
+  relâcher MISO hors sélection. Un esclave qui garde MISO en sortie tient le bus
+  même en fonctionnant parfaitement.
+- **Arbitrage.** Rien n'ordonne aujourd'hui les accès entre la nRF24, l'écran et
+  le P4.
+- Le P4 doit être flashé **avant** tout test radio sur la gauche.
 
 ## Périphériques
 
