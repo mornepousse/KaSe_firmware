@@ -14,7 +14,10 @@ VARIANT="${VARIANT:-kase_v2_debug}"
 if [ -z "${IDF_PATH:-}" ] && [ -f "$HOME/esp/esp-idf/export.sh" ]; then
   source "$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1 || true
 fi
-if [ -n "${IDF_PATH:-}" ]; then
+# Tester idf.py et non IDF_PATH : export.sh peut renseigner la variable sans
+# fournir la commande (toolchain en devshell Nix), auquel cas la phase de build
+# echoue sur tous les boards au lieu de degrader proprement.
+if command -v idf.py >/dev/null 2>&1; then
   OUT="$("$REPO/scripts/check.sh" --variant "$VARIANT" 2>&1)"
   rc=$?
   MSG="check.sh (board $VARIANT) est ROUGE avant de conclure :"
