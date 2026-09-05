@@ -185,6 +185,36 @@ static void test_right_does_not_swap_the_link_uart(void)
     TEST_ASSERT_EQ(BOARD_LINK_SWAP_TX_RX, 0, "la droite ne swappe pas");
 }
 
+/* Les consommateurs de la pile RF (comm/rf/kbd_relay_tx.c) construisent leur
+ * config depuis BOARD_NRF_SPI_SCK, BOARD_NRF_CSN_GPIO... Ces noms different de
+ * ceux du contrat materiel (BOARD_NRF_SCK, BOARD_NRF_CSN), et kbd_relay_tx.c
+ * fournit un bloc de repli — GPIO 35/36/37, interdits ici — sous
+ * `#ifndef BOARD_NRF_SPI_HOST`.
+ *
+ * Les board.h Niphargus DEFINISSENT BOARD_NRF_SPI_HOST : le garde est donc
+ * faux, le bloc de repli entier est saute, et les alias ne sont definis nulle
+ * part. Le mode de defaillance n'est pas un mauvais brochage silencieux mais
+ * une erreur de compilation, le jour ou un consommateur de la pile RF sera
+ * compile pour une moitie. C'est moins grave, ca reste a fermer.
+ *
+ * boards/conchodytes/board.h a du ajouter ce bloc d'alias pour la meme raison,
+ * en documentant le piege. Les deux moities l'avaient oublie. Ce test
+ * verrouille l'equivalence : un alias absent ne compile pas, un alias qui
+ * derive echoue ici — pas au banc, six mois plus tard.
+ *
+ * On n'asserte volontairement NI canal NI suffixe d'adresse : contrairement a
+ * la souris qui n'a qu'un lien, une moitie en a deux (PRX vers l'autre moitie,
+ * PTX vers le dongle). Le choix des canaux appartient a B3/B4. */
+static void test_right_radio_pin_aliases(void)
+{
+    TEST_ASSERT_EQ(BOARD_NRF_SPI_SCK,  BOARD_NRF_SCK,  "alias SCK  == pin brute");
+    TEST_ASSERT_EQ(BOARD_NRF_SPI_MISO, BOARD_NRF_MISO, "alias MISO == pin brute");
+    TEST_ASSERT_EQ(BOARD_NRF_SPI_MOSI, BOARD_NRF_MOSI, "alias MOSI == pin brute");
+    TEST_ASSERT_EQ(BOARD_NRF_CSN_GPIO, BOARD_NRF_CSN,  "alias CSN  == pin brute");
+    TEST_ASSERT_EQ(BOARD_NRF_CE_GPIO,  BOARD_NRF_CE,   "alias CE   == pin brute");
+    TEST_ASSERT_EQ(BOARD_NRF_IRQ_GPIO, BOARD_NRF_IRQ,  "alias IRQ  == pin brute");
+}
+
 void test_niphar_right_pins(void)
 {
     printf("\n-- brochage Niphargus DROITE (contrat netlist 2026-08-06) --\n");
@@ -196,4 +226,5 @@ void test_niphar_right_pins(void)
     test_right_no_reserved_gpio();
     test_right_no_pin_used_twice();
     test_right_does_not_swap_the_link_uart();
+    test_right_radio_pin_aliases();
 }

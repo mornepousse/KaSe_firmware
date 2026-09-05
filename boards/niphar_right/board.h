@@ -70,6 +70,24 @@
 #define BOARD_NRF_CE         GPIO_NUM_15
 #define BOARD_NRF_CSN        GPIO_NUM_16
 #define BOARD_NRF_IRQ        GPIO_NUM_41
+/* Alias attendus par la pile RF. comm/rf/kbd_relay_tx.c construit sa config
+ * depuis BOARD_NRF_SPI_SCK, BOARD_NRF_CSN_GPIO... et son bloc de repli est
+ * garde par `#ifndef BOARD_NRF_SPI_HOST` — que nous definissons ci-dessus.
+ * Le repli est donc saute et ces alias doivent exister ici, sans quoi tout
+ * consommateur de la pile RF cesse de compiler pour cette moitie.
+ * Verrouilles par test/test_niphar_right_pins.c.
+ *
+ * Ni BOARD_NRF_CHANNEL ni BOARD_NRF_ADDR_SUFFIX : une moitie porte DEUX liens
+ * (PRX vers l'autre moitie, PTX vers le dongle), un canal unique n'aurait pas
+ * de sens. Leur choix appartient a B3/B4 — cf.
+ * docs/superpowers/specs/2026-08-19-niphargus-firmware-design.md. */
+#define BOARD_NRF_SPI_SCK       BOARD_NRF_SCK
+#define BOARD_NRF_SPI_MISO      BOARD_NRF_MISO
+#define BOARD_NRF_SPI_MOSI      BOARD_NRF_MOSI
+#define BOARD_NRF_CSN_GPIO      BOARD_NRF_CSN
+#define BOARD_NRF_CE_GPIO       BOARD_NRF_CE
+#define BOARD_NRF_IRQ_GPIO      BOARD_NRF_IRQ
+
 
 /* ── Lien inter-moitiés (TRRS, UART1) ──────────────────────────
  * Câble droit : TX arrive sur TX. UNE moitié doit échanger TXD/RXD via la

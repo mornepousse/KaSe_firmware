@@ -9,6 +9,29 @@ CONFIG_KASE_NIPHAR_MASTER=y
 # sdkconfig.defaults) — c'est ce qui a un effet.
 CONFIG_BT_ENABLED=n
 
-CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+# La gauche est le maître (moteur keymap + trackpad) : c'est la moitié dont les
+# logs comptent le plus. GPIO43/44 sont le connecteur de prog dédié sur
+# Niphargus, jamais la matrice (cf. boards/niphar_left/board.h) — le
+# CONFIG_ESP_CONSOLE_NONE de la base ne vise que la matrice du V2 et n'a pas
+# lieu de s'appliquer ici.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+
+# Module réellement posé : ESP32-S3-WROOM-1 N16R8 (16 MB flash / 8 MB PSRAM),
+# constaté à l'esptool au bring-up du 2026-09-01.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Bring-up 2026-09-01 : verifier que la nRF24 repond sur le SPI.
+# DESACTIVE le 2026-09-05 : depuis que KASE_KBD_WIRELESS est actif, kbd_relay_tx
+# initialise deja la radio et logue son propre "probe csn=". Le laisser actif
+# double l'init du bus SPI ("spi_bus_initialize: SPI bus already initialized")
+# et brouille le diagnostic. L'option reste dans l'arbre pour un futur bring-up
+# de la moitie droite, qui n'a pas encore de consommateur RF.
+CONFIG_KASE_NRF_PROBE=y
+
+# B4 — relais HID vers le dongle. Le routage est USB-first
+# (comm/usb/usb_presence.c : tud_mounted) : USB branche -> HID par USB, USB
+# absent -> radio vers le slot clavier du dongle. Pas d'ESP-NOW ni de WiFi,
+# malgre l'intitule du Kconfig qui est un vestige.
+CONFIG_KASE_KBD_WIRELESS=y

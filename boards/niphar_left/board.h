@@ -67,6 +67,36 @@
 #define BOARD_NRF_CE         GPIO_NUM_15
 #define BOARD_NRF_CSN        GPIO_NUM_16
 #define BOARD_NRF_IRQ        GPIO_NUM_41
+/* Alias attendus par la pile RF. comm/rf/kbd_relay_tx.c construit sa config
+ * depuis BOARD_NRF_SPI_SCK, BOARD_NRF_CSN_GPIO... et son bloc de repli est
+ * garde par `#ifndef BOARD_NRF_SPI_HOST` — que nous definissons ci-dessus.
+ * Le repli est donc saute et ces alias doivent exister ici, sans quoi tout
+ * consommateur de la pile RF cesse de compiler pour cette moitie.
+ * Verrouilles par test/test_niphar_left_pins.c.
+ *
+ * Ni BOARD_NRF_CHANNEL ni BOARD_NRF_ADDR_SUFFIX : une moitie porte DEUX liens
+ * (PRX vers l'autre moitie, PTX vers le dongle), un canal unique n'aurait pas
+ * de sens. Leur choix appartient a B3/B4 — cf.
+ * docs/superpowers/specs/2026-08-19-niphargus-firmware-design.md. */
+#define BOARD_NRF_SPI_SCK       BOARD_NRF_SCK
+#define BOARD_NRF_SPI_MISO      BOARD_NRF_MISO
+#define BOARD_NRF_SPI_MOSI      BOARD_NRF_MOSI
+#define BOARD_NRF_CSN_GPIO      BOARD_NRF_CSN
+#define BOARD_NRF_CE_GPIO       BOARD_NRF_CE
+#define BOARD_NRF_IRQ_GPIO      BOARD_NRF_IRQ
+#define BOARD_NRF_CLOCK_HZ      (8 * 1000 * 1000)
+#define BOARD_NRF_SPI_CLOCK_HZ  BOARD_NRF_CLOCK_HZ
+
+/* Lien MAITRE -> DONGLE. Doit s'accorder avec board_rf_radio1_cfg() de
+ * boards/kase_dongle/board_rf.h : canal 0x4C (2476 MHz), adresse "KaSe" +
+ * suffixe 0x01, le slot clavier de comm/rf/rf_slot.h.
+ *
+ * ⚠ Ce n'est PAS le lien droite -> gauche. La moitie gauche en porte deux
+ * (PRX vers la droite, PTX vers le dongle) ; celui-ci est le second. Le
+ * premier aura ses propres macros quand B3 sera ecrit. */
+#define BOARD_NRF_CHANNEL       0x4C
+#define BOARD_NRF_ADDR_SUFFIX   0x01
+
 
 /* ── Lien inter-moitiés (TRRS, UART1) ──────────────────────────
  * Câble droit : TX arrive sur TX. UNE moitié doit échanger TXD/RXD via la

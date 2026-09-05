@@ -12,6 +12,9 @@ CONFIG_BT_ENABLED=n
 # une console au connecteur de prog est précieuse au bring-up.
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 
-CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+# Module réellement posé : ESP32-S3-WROOM-1 N16R8 (16 MB flash / 8 MB PSRAM).
+# Constaté à l'esptool sur la moitié GAUCHE au bring-up du 2026-09-01 ; la
+# droite n'a pas encore été lue, on suppose le même BOM.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
