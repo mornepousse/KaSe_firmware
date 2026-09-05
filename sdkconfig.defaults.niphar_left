@@ -35,3 +35,10 @@ CONFIG_KASE_NRF_PROBE=y
 # absent -> radio vers le slot clavier du dongle. Pas d'ESP-NOW ni de WiFi,
 # malgre l'intitule du Kconfig qui est un vestige.
 CONFIG_KASE_KBD_WIRELESS=y
+
+# Banc du 2026-09-05 : l'alimentation batterie ne fonctionne pas, donc
+# debrancher l'USB pour faire basculer le routage n'est pas possible. On force
+# le HID sur la radio, USB branche, pour eprouver le lien vers le dongle.
+# A RETIRER une fois l'alimentation batterie reparee : tant que c'est actif, la
+# moitie gauche ne tape plus par son propre USB.
+CONFIG_KASE_RF_FORCE_ROUTE=y

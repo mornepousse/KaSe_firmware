@@ -72,9 +72,46 @@ config KASE_NO_KEYMAP_ENGINE
 config KASE_HAS_LOCAL_MATRIX
     bool
     default y if KASE_DEVICE_ROLE_KEYBOARD
+    default y if KASE_DEVICE_ROLE_NIPHAR_SLAVE
     default n
     help
         Compiles matrix_scan.c and keyboard_task.c local-scan path.
+
+        La moitie droite du Niphargus scanne sa propre matrice : c'est meme sa
+        seule fonction, la spec la decrit comme "un scanner qui remonte sa
+        matrice brute". Elle n'a en revanche ni moteur keymap ni sortie HID.
+
+config KASE_RF_FORCE_ROUTE
+    bool "Forcer le HID sur la radio meme quand l'USB est branche"
+    default n
+    depends on KASE_KBD_WIRELESS
+    help
+        Diagnostic de banc. En temps normal le routage est USB-first : USB
+        branche -> HID par USB, USB absent -> radio vers le dongle. Tester le
+        lien radio suppose donc de debrancher l'USB, donc une alimentation
+        batterie qui fonctionne.
+
+        Cette option force KBD_OUT_RF en permanence : l'USB continue d'alimenter
+        la carte et de porter le CDC, mais les rapports HID partent par la
+        radio. Elle permet de valider le lien vers le dongle sans dependre de
+        l'alimentation batterie.
+
+        Le clavier ne tape donc PLUS par son propre USB tant qu'elle est active.
+
+config KASE_MATRIX_LOG_CONSOLE
+    bool "Journaliser chaque changement de matrice sur la console"
+    default n
+    depends on KASE_HAS_LOCAL_MATRIX
+    help
+        Diagnostic de banc. Chaque appui et chaque relachement sort en clair sur
+        la console sous la forme "MTX r=<ligne> c=<colonne> appui|relache",
+        sans passer par le CDC — utile quand l'USB de la carte n'est pas
+        exploitable, ou pour verifier une table de brochage contre le contrat
+        materiel.
+
+        Enfreint volontairement la regle "pas de ESP_LOGI dans les callbacks de
+        scan matrice" du CLAUDE.md : c'est trop lent pour de la frappe reelle.
+        A n par defaut, jamais compile en production.
 
 config KASE_HAS_DISPLAY
     bool

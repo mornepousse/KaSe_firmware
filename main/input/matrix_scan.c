@@ -57,6 +57,17 @@ static void keyboard_btn_cb(keyboard_btn_handle_t kbd_handle, keyboard_btn_repor
         }
     }
 
+#if CONFIG_KASE_MATRIX_LOG_CONSOLE
+    /* Journal de banc : chaque changement en clair sur la console, avant que
+     * prev_matrix_state ne soit ecrase par l'un ou l'autre des chemins. Ne
+     * depend pas du CDC, contrairement au mode test ci-dessous. */
+    for (int r = 0; r < MATRIX_ROWS; r++)
+        for (int c = 0; c < MATRIX_COLS; c++)
+            if (new_state[r][c] != prev_matrix_state[r][c])
+                ESP_LOGW(TAG, "MTX r=%d c=%d %s", r, c,
+                         new_state[r][c] ? "appui" : "relache");
+#endif
+
     /* ── Test mode: send change events, skip HID ── */
     if (matrix_test_mode) {
         uint32_t now = esp_timer_get_time() / 1000;

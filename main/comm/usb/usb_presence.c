@@ -53,7 +53,16 @@ void usb_presence_poll(bool relay_active)
 
 kbd_out_t kbd_active_route(void)
 {
+#if CONFIG_KASE_RF_FORCE_ROUTE
+    /* Banc : le HID part par la radio meme USB branche. On garde ainsi
+     * l'alimentation et la console USB pendant qu'on eprouve le lien vers le
+     * dongle — utile tant que l'alimentation batterie n'est pas fiable.
+     * s_route continue d'etre calcule par usb_presence_poll() : seule la
+     * decision rendue ici est forcee, l'etat reel reste observable. */
+    return KBD_OUT_RF;
+#else
     return s_route;
+#endif
 }
 
 bool usb_cable_present_now(void)
