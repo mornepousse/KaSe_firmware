@@ -13,6 +13,40 @@
  * two low-level TX helpers called by hid_report.c under the CONFIG guard.
  */
 
+/* ── Répétition bornée du dernier rapport (logique pure, testée host) ──────
+ *
+ * Le chemin HIDREPORT n'a pas de réconciliation : un key-up perdu sur un lien
+ * radio bruité laisserait une touche coincée. Le relais réémet donc le dernier
+ * rapport après chaque changement — mais un nombre BORNÉ de fois, puis se tait.
+ *
+ * L'implémentation d'origine réémettait indéfiniment dès la première frappe de
+ * la vie de la carte (`s_have_last` n'était jamais remis à faux). Mesuré au
+ * banc le 2026-09-05 : 100 paquets/s clavier au repos. Deux conséquences —
+ * la moitié gauche du Niphargus, sourde pendant qu'elle émet, l'était en
+ * permanence, ce qui ruine le pari R1 du design ; et le budget < 50 µA de B7
+ * devenait inatteignable.
+ *
+ * Pure, donc host-testable (test/test_kbd_refresh.c), sur le modèle de
+ * kbd_route_target/vbus_debounce_step dans comm/usb/usb_presence.h. */
+typedef struct {
+    uint8_t left;          /* répétitions restantes */
+} kbd_refresh_t;
+
+/* Changement d'état HID : réarme le compteur de répétitions. */
+static inline void kbd_refresh_arm(kbd_refresh_t *r, uint8_t repeats)
+{
+    r->left = repeats;
+}
+
+/* Un tick du timer de rafraîchissement : faut-il réémettre maintenant ?
+ * Consomme une répétition quand la réponse est oui. */
+static inline bool kbd_refresh_step(kbd_refresh_t *r)
+{
+    if (r->left == 0) return false;
+    r->left--;
+    return true;
+}
+
 /* Init NRF radio in PTX mode and restore (or discover) the dongle pairing from
  * NVS, declaring device type RF_DEV_SMART_KBD. Sets the internal s_paired flag.
  * Safe to call even if the board has no NRF hardware — the flag stays false. */

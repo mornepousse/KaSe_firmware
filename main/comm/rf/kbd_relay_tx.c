@@ -33,6 +33,13 @@ static const char *TAG = "kbd_relay";
  * mouse is relative (non-idempotent) so it is NOT refreshed. */
 #define KBD_RELAY_REFRESH_MS  10
 
+/* Répétitions du dernier rapport après un changement, à KBD_RELAY_REFRESH_MS
+ * d'intervalle. 5 × 10 ms = 50 ms d'auto-réparation : un key-up perdu cinq fois
+ * de suite alors que chaque émission bénéficie déjà des 15 retransmissions ESB
+ * n'arrive pas en pratique. Au-delà, le lien redevient silencieux — c'est ce qui
+ * rend vraie la prémisse « émissions événementielles » du design. */
+#define KBD_RELAY_REPEATS     5
+
 /* ── Fallback NRF pin config ────────────────────────────────────────────────
  * Keyboard boards (V2, V2D) do not define BOARD_NRF_* — those are on the half
  * and dongle board headers.  The fallbacks here let the code compile and link
@@ -64,7 +71,7 @@ static bool s_paired = false;
 static SemaphoreHandle_t s_tx_mutex;
 static uint8_t s_last_mod;
 static uint8_t s_last_kb[6];
-static bool    s_have_last;
+static kbd_refresh_t s_refresh;   /* répétition bornée — voir kbd_relay_tx.h */
 static esp_timer_handle_t s_refresh_timer;   /* periodic refresh; stopped during sleep */
 
 static void kbd_tx_locked(const uint8_t *buf, uint8_t len)
@@ -84,7 +91,10 @@ static void kbd_relay_refresh_cb(void *arg)
     (void)arg;
     usb_presence_poll(s_paired);
     if (kbd_active_route() != KBD_OUT_RF) return;
-    if (!s_have_last) return;
+    /* Réémission bornée : sans changement récent, on se tait. usb_presence_poll
+     * ci-dessus reste appelé à chaque tick — c'est lui qui garde le routage
+     * frais, il ne doit pas dépendre de l'activité clavier. */
+    if (!kbd_refresh_step(&s_refresh)) return;
     uint8_t buf[9];
     rf_encode_hidreport_kbd(buf, s_last_mod, s_last_kb);
     kbd_tx_locked(buf, 9);
@@ -215,7 +225,8 @@ void kbd_relay_init(void)
 
     /* Periodic keyboard-state refresh: self-heals lost key-ups over the lossy
      * link (no heartbeat reconciliation on the HIDREPORT path). Streams only
-     * after the first keystroke (s_have_last) so an idle keyboard stays quiet. */
+     * après un changement seulement (kbd_refresh_arm), pour un nombre borné de
+     * ticks : un clavier au repos est réellement silencieux. */
     const esp_timer_create_args_t ta = {
         .callback = kbd_relay_refresh_cb, .name = "kbd_refresh",
     };
@@ -251,7 +262,7 @@ void kbd_relay_send_kbd(uint8_t modifier, const uint8_t kb[6])
 {
     s_last_mod = modifier;
     memcpy(s_last_kb, kb, 6);
-    s_have_last = true;
+    kbd_refresh_arm(&s_refresh, KBD_RELAY_REPEATS);
     uint8_t buf[9];
     rf_encode_hidreport_kbd(buf, modifier, kb);
     kbd_tx_locked(buf, 9);
