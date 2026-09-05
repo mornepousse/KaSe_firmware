@@ -128,7 +128,6 @@ if(CONFIG_KASE_KBD_WIRELESS)
         "comm/rf/rf_driver.c"
         "comm/rf/rf_pairing.c"
         "comm/rf/kbd_relay_tx.c"
-        "comm/rf/v2d_sleep.c"
         "comm/usb/usb_presence.c")
 endif()
 
@@ -229,6 +228,28 @@ if(CONFIG_KASE_HAS_RF_TX AND NOT CONFIG_KASE_KBD_WIRELESS)
     )
 endif()
 
+# v2d_sleep.c fait du light-sleep RF en eteignant un OLED et en prenant le
+# verrou LVGL : il depend durement de status_display_sleep/wake. Il ne peut donc
+# etre compile que sur un board qui a un ecran — la moitie gauche du Niphargus
+# n'en a pas (J12 non peuple) et le lien echouait sur ces deux symboles.
+# Le sommeil du Niphargus est un autre design (reveil EXT1 sur les rows, scan en
+# domaine RTC, cible < 50 uA) : c'est la brick B7 de
+# docs/superpowers/specs/2026-08-19-niphargus-firmware-design.md.
+if(CONFIG_KASE_KBD_WIRELESS AND CONFIG_KASE_HAS_DISPLAY)
+    list(APPEND srcs "comm/rf/v2d_sleep.c")
+endif()
+
+# NRF probe (la radio repond-elle ?) — diagnostic de bring-up, explicite.
+# Les gardes ci-dessous evitent de lister rf_driver.c deux fois : il est deja
+# tire par KBD_WIRELESS, HAS_RF_RX et HAS_RF_TX.
+if(CONFIG_KASE_NRF_PROBE)
+    list(APPEND srcs "comm/rf/rf_probe.c")
+    if(NOT CONFIG_KASE_KBD_WIRELESS AND NOT CONFIG_KASE_HAS_RF_RX
+       AND NOT CONFIG_KASE_HAS_RF_TX)
+        list(APPEND srcs "comm/rf/rf_driver.c")
+    endif()
+endif()
+
 # NRF line short-circuit bring-up diagnostic — only when explicitly enabled
 if(CONFIG_KASE_NRF_LINE_TEST)
     list(APPEND srcs "comm/rf/rf_line_test.c")
@@ -264,6 +285,10 @@ if(CONFIG_KASE_HAS_RF_RX)
 endif()
 
 if(CONFIG_KASE_KBD_WIRELESS AND NOT CONFIG_KASE_HAS_RF_RX)
+    list(APPEND priv_requires esp_driver_spi)
+endif()
+
+if(CONFIG_KASE_NRF_PROBE AND NOT CONFIG_KASE_HAS_RF_RX AND NOT CONFIG_KASE_KBD_WIRELESS)
     list(APPEND priv_requires esp_driver_spi)
 endif()
 

@@ -15,3 +15,9 @@ CONFIG_BT_ENABLED=n
 # à rien ici. Vérifié sur le binaire : ni esp_wifi_init, ni esp_wifi_start, ni
 # wifi_init_config ne sont liés. Le flag reste à y dans le sdkconfig mais ne
 # porte aucun code sur ce board.
+
+# Le V2D est une carte bricolee dont le fil CE de la nRF24 est incertain : il
+# garde le balayage des broches CE candidates a l'appairage. Desactive partout
+# ailleurs (default n) — sur une carte dont le brochage est verifie a la
+# netlist, il pilote des broches qui appartiennent a d'autres fonctions.
+CONFIG_KASE_RF_CE_SCAN=y

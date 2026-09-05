@@ -180,6 +180,37 @@ config KASE_HAS_RF_RX
     help
         Compiles NRF24L01+ RX driver and rf_rx_task (dongle role).
 
+config KASE_RF_CE_SCAN
+    bool "Pairing: brute-force the NRF CE pin (bodged boards only)"
+    default n
+    help
+        Quand l'appairage echoue sur la broche CE configuree, essaie une liste
+        de GPIO candidats en les pilotant en sortie. Contournement herite du V2D
+        bricole a la main, ou le fil CE etait incertain.
+
+        DANGEREUX sur une carte dont le brochage est connu : la liste
+        { 47, 45, 38, 39, 40, 33, 34, 35, 36 } touche, sur le Niphargus, le bus
+        SPI partage (38/39/40), le SDA du trackpad (47), une broche de strapping
+        interdite (45) et la PSRAM octale du N16R8 (35/36 — cf. datasheet
+        ESP32-S3-WROOM-1 p. 12).
+
+        La broche CE configuree par board.h est de toute facon toujours essayee
+        en premier, que cette option soit active ou non.
+
+config KASE_NRF_PROBE
+    bool "NRF probe at boot (does the radio answer?)"
+    default n
+    help
+        Diagnostic de banc. Au boot, configure les GPIO de la nRF24, ouvre le
+        bus SPI et lit les registres CONFIG et RF_SETUP. Un module absent ou mal
+        cable lit 0x00 ou 0xFF sur les deux, ce que rf_driver_probe() rejette.
+
+        N'installe aucune tache et ne relaie rien : ce n'est pas le lien radio,
+        qui reste le ressort de B3/B4 dans
+        docs/superpowers/specs/2026-08-19-niphargus-firmware-design.md.
+
+        Logue en ESP_LOGW (tag "rf_probe") — demande une console.
+
 config KASE_NRF_LINE_TEST
     bool "NRF line short-circuit test at boot (bring-up diagnostic)"
     default n

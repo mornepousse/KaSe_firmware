@@ -15,8 +15,10 @@
 #include "hid_transport.h"
 #include "usb_hid.h"        /* usb_try_remote_wakeup */
 #if CONFIG_KASE_KBD_WIRELESS
-#include "v2d_sleep.h"
 #include "usb_presence.h"   /* kbd_active_route */
+#if CONFIG_KASE_HAS_DISPLAY
+#include "v2d_sleep.h"      /* voir la garde du CMakeLists : depend de l'ecran */
+#endif
 #endif
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -140,9 +142,11 @@ void vTaskKeyboard(void *pvParameters)
             }
         }
 
-#if CONFIG_KASE_KBD_WIRELESS
+#if CONFIG_KASE_KBD_WIRELESS && CONFIG_KASE_HAS_DISPLAY
         /* RF-mode idle → light-sleep (USB stays awake). v2d_sleep_enter() blocks
-         * until a keypress wakes it, then restores everything. */
+         * until a keypress wakes it, then restores everything.
+         * Ecran obligatoire : v2d_sleep_enter() eteint l'OLED. Une moitie
+         * Niphargus n'a pas d'ecran et aura son propre sommeil en B7. */
         {
             uint32_t idle = (uint32_t)(esp_timer_get_time() / 1000)
                           - get_last_activity_time_ms();

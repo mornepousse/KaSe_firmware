@@ -130,7 +130,17 @@ static void kbd_pairing_task(void *arg)
      * each candidate GPIO as CE: the one that lets a REQ reach the dongle (ACK
      * comes back) is the real CE. Logs the winner so it can be set in board.h.
      * Only cfg.pin_ce changes (a GPIO toggled directly) — no SPI re-init. */
-    static const int ce_cand[] = { 47, 45, 38, 39, 40, 33, 34, 35, 36 };
+    /* La broche CE du board.h passe TOUJOURS en premier : sur une carte dont le
+     * brochage est verifie a la netlist, c'est la bonne, et le balayage n'a
+     * aucune raison d'etre. Il ne suivait pas cette regle et la liste ci-dessous
+     * ne contient meme pas le CE du Niphargus (GPIO15) — l'appairage ne pouvait
+     * donc jamais aboutir sur cette carte. */
+    static const int ce_cand[] = {
+        BOARD_NRF_CE_GPIO,
+#if CONFIG_KASE_RF_CE_SCAN
+        47, 45, 38, 39, 40, 33, 34, 35, 36,
+#endif
+    };
     rf_pair_ack_t ack;
     bool acked = false;
     int win_ce = -1;

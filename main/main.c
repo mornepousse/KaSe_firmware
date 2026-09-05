@@ -32,6 +32,13 @@
 
 #if CONFIG_KASE_KBD_WIRELESS
 #include "kbd_relay_tx.h"
+#include "usb_presence.h"   /* kbd_active_route — affiche par le battement de coeur */
+#endif
+
+/* Diagnostic de banc, independant du role : la gauche du Niphargus n'a ni
+ * KBD_WIRELESS ni HAS_RF_RX, l'include doit donc vivre hors de ces blocs. */
+#if CONFIG_KASE_NRF_PROBE
+#include "rf_probe.h"
 #endif
 
 #if CONFIG_KASE_HAS_RF_RX
@@ -57,9 +64,22 @@ static void cpu_time_logger_task(void *arg) {
     if (cpu_time_measure_period(1000, buf, sizeof(buf)) == 0) {
       ESP_LOGI(TAG, "CPU usage:\n%s", buf);
     } else {
-      ESP_LOGW(TAG, "cpu_time_measure_period failed");
+      /* Les statistiques FreeRTOS ne sont pas compilees
+       * (CONFIG_FREERTOS_USE_TRACE_FACILITY absent) : ce message tombait toutes
+       * les 5 s sans rien apprendre. On en fait un battement de coeur, seul
+       * temoin de vie quand la carte tourne sur batterie — l'USB est alors
+       * debranche et ne dit plus rien. Il affiche aussi le routage, ce qui
+       * permet de verifier que la bascule USB -> RF a bien eu lieu. */
+      uint32_t up_s = (uint32_t)(esp_timer_get_time() / 1000000);
+#if CONFIG_KASE_KBD_WIRELESS
+      ESP_LOGW(TAG, "HB up=%us route=%s relais=%s", (unsigned)up_s,
+               (kbd_active_route() == KBD_OUT_RF) ? "RF" : "USB",
+               kbd_relay_active() ? "actif" : "inactif");
+#else
+      ESP_LOGW(TAG, "HB up=%us", (unsigned)up_s);
+#endif
     }
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    vTaskDelay(pdMS_TO_TICKS(2000));
   }
 }
 #endif
@@ -277,6 +297,13 @@ void app_main(void) {
 
   ESP_LOGI(TAG, "Keyboard manager init");
   keyboard_manager_init();
+
+#if CONFIG_KASE_NRF_PROBE
+  /* Diagnostic de banc. DOIT tourner avant kbd_relay_init() : celui-ci reclame
+   * les GPIO de la radio et initialise le bus SPI, apres quoi le test de lignes
+   * ne mesurerait plus que ses propres broches configurees. */
+  rf_probe_run();
+#endif
 
 #if CONFIG_KASE_KBD_WIRELESS
   kbd_relay_init();
