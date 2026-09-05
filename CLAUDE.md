@@ -4,8 +4,14 @@ Firmware ESP32-S3 pour clavier split-ergo custom (KaSe V1/V2/V2D).
 Distribué via binaires GitLab Releases. Build via ESP-IDF 5.5.
 
 ## Repo
-- **Origin** : https://gitlab.com/harrael/KeSp_firmware
-- **Local** : `~/Documents/GitHub/KaSe_firmware/`
+- **Référence** : https://github.com/mornepousse/KeSp_firmware (remote `github`)
+  — c'est le dépôt qui fait foi.
+- **Miroir** : https://gitlab.com/harrael/KeSp_firmware (remote `origin`).
+  ⚠ `origin` pointe vers GitLab, donc un `git push` sans argument y va. Pousser
+  aussi sur `github`, ou vérifier que le miroir a suivi : le 2026-09-05,
+  `origin/main` avait deux commits de retard sur `github/main`, le miroir étant
+  bloqué faute de pouvoir rembobiner GitHub.
+- **Local** : `~/Documents/GitHub/KeSp_firmware-gitlab/`
 - **Related** : https://gitlab.com/harrael/KeSp_controller (remapping software)
 
 ## Versioning
