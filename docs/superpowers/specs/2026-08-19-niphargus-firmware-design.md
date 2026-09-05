@@ -23,7 +23,7 @@ Documents de référence :
 - `rili/docs/superpowers/specs/2026-07-29-rouge-gorge-refonte-design.md` — design
   matériel : alimentation, ESD, mécanique, modes.
 
-Matériel : deux moitiés ESP32-S3-WROOM-1-N8R2, une nRF24L01+ chacune, cellule
+Matériel : deux moitiés ESP32-S3-WROOM-1-N16R8, une nRF24L01+ chacune, cellule
 16340, matrice 4×7 (26 touches). Trackpad Azoteq TPS43 à gauche, écran Sharp
 LS011B7DH03 à droite. Lien filaire TRRS (UART1 + 5 V commuté). **Pas de WiFi ni
 de BLE** — le budget d'alimentation l'interdit (régulateur HT7833, pics radio
@@ -31,6 +31,22 @@ hors budget), donc la configuration et les mises à jour passent par USB.
 
 **Les cartes ne sont pas encore arrivées** (commandées le 2026-08-07). Aucune
 validation matérielle n'est possible aujourd'hui.
+
+> **Périmé — mise à jour du 2026-09-01.** La moitié GAUCHE est arrivée et a été
+> mise sous tension pour la première fois. Acquis, vérifiés au banc :
+>
+> - Boot complet sur flash, console applicative sur le connecteur de prog
+>   (GPIO43/44), `Boot count: 1`, ni boucle ni safe mode.
+> - Table de brochage matrice conforme au contrat, colonne par colonne.
+> - **nRF24 fonctionnelle** : `rf_driver_probe()` répond
+>   `CONFIG=0x3f RF_SETUP=0x06 -> OK`, puis init PRX complète
+>   (`ch=76 addr=KaSe.01`). Les valeurs relues étant celles écrites au boot
+>   précédent, les deux sens du bus SPI sont prouvés.
+> - Le module posé est un **N16R8**, pas le N8R2 de la ligne ci-dessus.
+>
+> Restent non validés : diodes de matrice non soudées (aucun appui ne peut
+> remonter), USB natif non branché, trackpad sans driver, moitié droite
+> inexistante — donc le spike B4 de §5 n'est levé qu'à moitié.
 
 ## 2. Décisions d'architecture
 

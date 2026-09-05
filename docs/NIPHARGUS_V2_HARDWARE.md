@@ -4,7 +4,14 @@ Source de vérité : netlist du schéma `Niphargus/rili/pcb/niphar.kicad_sch`, v
 pin par pin lors de la revue du 2026-08-06 (commits `faf3e11`→`c1f9cf6`). En cas de
 doute, la netlist prime sur ce document.
 
-## MCU : ESP32-S3-WROOM-1(U)-N8R2 — un par moitié
+## MCU : ESP32-S3-WROOM-1(U)-N16R8 — un par moitié
+
+> **Corrigé au bring-up du 2026-09-01.** Ce document annonçait un **N8R2**
+> (8 MB flash / 2 MB PSRAM). La première moitié gauche mise sous tension répond
+> `16 MB` de flash et `8 MB` de PSRAM embarquée à l'esptool (ESP32-S3 rev v0.2,
+> MAC `d0:cf:13:21:92:60`) : le module posé est un **N16R8**. La moitié droite
+> n'a pas encore été lue. La PSRAM reste désactivée côté firmware
+> (aucun `CONFIG_SPIRAM=y`).
 
 U6 = gauche (feuille `s3`), U5 = droite (feuille `right`). Nets de la droite suffixés `_d`/`_D`.
 
