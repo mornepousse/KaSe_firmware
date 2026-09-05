@@ -21,9 +21,13 @@ fi
 OUT="$("$REPO/scripts/check.sh" --fast --changed "$FP" 2>&1)"
 rc=$?
 if [ "$rc" -ne 0 ]; then
-  echo "Régression phase rapide après édition de $FP :" >&2
-  echo "$OUT" | tail -8 >&2
-  exit 2   # remonte à Claude
+  # Avis, pas blocage. La norme TDD impose d'écrire l'assertion rouge AVANT
+  # l'implémentation : bloquer ici ferait sonner l'alarme à chaque pas correct,
+  # et une alarme qui sonne toujours finit ignorée. Le rouge qui arrête est
+  # celui du hook Stop et du pre-push.
+  python3 -c 'import json,sys; print(json.dumps({"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":sys.argv[1]}}, ensure_ascii=False))' \
+    "tripwire: phase rapide ROUGE après édition de $FP — détail: $GITDIR/tripwire/last-fail.log. À corriger avant de conclure : le hook Stop bloquera."
+  exit 0
 fi
 # Garde anti-affaiblissement : perte nette d'assertions vs HEAD dans un test ?
 case "$FP" in

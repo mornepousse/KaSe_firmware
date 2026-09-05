@@ -6,21 +6,8 @@ set -uo pipefail
 REPO="$(git rev-parse --show-toplevel)"
 echo "[pre-push] check.sh complet…"
 export TRIPWIRE_RATCHET_STRICT=1   # au push, une baisse du nombre de tests bloque
-if [ -z "${IDF_PATH:-}" ] && [ -f "$HOME/esp/esp-idf/export.sh" ]; then
-  source "$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1 || true
-fi
-# Un IDF_PATH defini ne garantit PAS un idf.py utilisable. Quand la toolchain
-# vient d'un devshell (Nix), export.sh renseigne IDF_PATH sans mettre idf.py
-# dans le PATH : check.sh echouait alors sur les 7 boards avec
-# "idf.py: command not found", un rouge qui ne dit rien du code et qui bloque
-# le push. On teste donc la commande elle-meme, pas la variable.
-if command -v idf.py >/dev/null 2>&1; then
-  "$REPO/scripts/check.sh"
-else
-  echo "[pre-push] idf.py introuvable — phase de build sautee, tests host seuls." >&2
-  echo "[pre-push] Pour un check complet, lancer ./scripts/check.sh dans le devshell." >&2
-  "$REPO/scripts/check.sh" --host-only
-fi
+
+"$REPO/scripts/check.sh"
 rc=$?
 if [ "$rc" -ne 0 ]; then
   echo "[pre-push] ROUGE — push bloqué. (git push --no-verify pour forcer un WIP)" >&2

@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# tripwire-template: v0.10.2
+# tripwire-template: v0.13.0
 # Tripwire anti-régression KaSe — source unique de vérité du "quoi vérifier".
 # Généré par /tripwire:init. Adapter ICI ; les hooks ne font qu'appeler ce script.
 # Modes:
 #   check.sh                  -> full: phase rapide + toutes les variantes
+#   Alias de dialecte KaSe : --host-only = --fast ; --board <name> = --variant <name>
 #   check.sh --fast           -> phase rapide uniquement (~secondes)
-#   check.sh --variant <name> -> phase rapide + build d'un seul board
-# Alias historiques KaSe (CI, agents et docs les utilisent — conservés) :
-#   --host-only = --fast ; --board <name> = --variant <name>
+#   check.sh --variant <name> -> phase rapide + une seule variante
 # Options:
 #   --changed <fichier>       -> (passé par les hooks) route la phase rapide sur le
 #                                module touché si MODULE_FAST est renseigné
@@ -24,7 +23,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR" || exit 1
 
-# ccache : les 6 boards partagent la majorité des composants → cache hit croisé.
+# ccache : les 7 boards partagent la majorité des composants → cache hit croisé.
 export IDF_CCACHE_ENABLE=1
 
 # Variantes de build. Laisser vide pour un projet mono-cible.
@@ -118,6 +117,53 @@ fi
 
 T_START=$SECONDS
 
+# ---- Divergences déclarées : un écart assumé ne disparaît pas en silence ----
+# .tripwire-divergences (committé), TSV : fichier<TAB>motif<TAB>pourquoi
+# Absent/vide -> inerte. Motif comparé en chaîne littérale, jamais en regex.
+# NOTE: cette fonction est dupliquée entre skills/init/templates/check.sh.tmpl
+# et scripts/check.sh (dogfood). Duplication assumée : un check.sh scaffoldé est
+# copié dans d'autres repos, il doit être autonome et ne rien sourcer du plugin.
+# Toute correction ici se reporte à l'identique dans l'autre fichier.
+check_divergences() {
+  [ -f .tripwire-divergences ] || return 0
+  if [ ! -r .tripwire-divergences ]; then
+    fail "divergences : .tripwire-divergences illisible (droits ?) — une fiche illisible n'est pas une fiche vide"
+    return 1
+  fi
+  local rc=0 n=0 line f rest m w
+  # Découpage explicite : la tabulation est un caractère IFS-whitespace, un
+  # `IFS=$'	' read` fusionnerait les tabs consécutives et décalerait les champs.
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    line="${line%$'
+'}"                                     # fiche en CRLF
+    case "$line" in ''|'#'*) continue ;; esac
+    f="${line%%$'	'*}"
+    rest="${line#*$'	'}"; [ "$rest" = "$line" ] && rest=""  # aucune tabulation
+    m="${rest%%$'	'*}"
+    w="${rest#*$'	'}"; [ "$w" = "$rest" ] && w=""
+    if [ -z "$f" ] || [ -z "$m" ]; then
+      fail "divergence ligne $n : ligne malformée (attendu: fichier<TAB>motif<TAB>pourquoi)"
+      rc=1; continue
+    fi
+    if [ ! -f "$f" ]; then
+      fail "divergence perdue : $f n'existe plus (motif « $m »)"
+      [ -n "$w" ] && echo "  motif déclaré : $w" >&2
+      echo "  → rétablir la divergence, ou retirer sa ligne de .tripwire-divergences" >&2
+      echo "    si l'abandon est voulu (le retrait part dans le diff, il sera vu en review)." >&2
+      rc=1; continue
+    fi
+    if ! grep -qF -- "$m" "$f"; then
+      fail "divergence perdue : $f ne contient plus « $m »"
+      [ -n "$w" ] && echo "  motif déclaré : $w" >&2
+      echo "  → rétablir la divergence, ou retirer sa ligne de .tripwire-divergences" >&2
+      echo "    si l'abandon est voulu (le retrait part dans le diff, il sera vu en review)." >&2
+      rc=1
+    fi
+  done < .tripwire-divergences
+  return "$rc"
+}
+
 # ---- Phase rapide (boucle courte, budget TRIPWIRE_FAST_BUDGET s) ----
 run_fast() {
   info "${FAST_LABEL}…"
@@ -141,6 +187,15 @@ run_fast() {
 # Mono-cible: appelée une fois avec $v vide.
 build_variant() {
   local v="$1"
+  # Un outil absent n'est PAS une régression. Sans idf.py — hook lancé hors du
+  # devshell Nix, CI sans toolchain — on saute la phase de build en l'annonçant,
+  # au lieu de rendre un rouge indiscernable d'un vrai code cassé. Un rouge qui
+  # veut dire "toolchain absente" finit par ne plus être lu.
+  # Déclaré dans .tripwire-divergences.
+  if ! command -v idf.py >/dev/null 2>&1; then
+    info "Build ${v:-complet} SAUTÉ (idf.py absent — lancer dans le devshell pour un check complet)"
+    return 0
+  fi
   info "Build ${v:-complet}…"
   if ( idf.py -B "build_$v" -DBOARD="$v" -DSDKCONFIG="build_$v/sdkconfig" build ) >"$OUTBUF" 2>&1; then
     ok "Build ${v:-complet} OK"
@@ -153,6 +208,7 @@ build_variant() {
 }
 
 rc=0
+check_divergences || rc=1
 run_fast || rc=1
 
 if [ "$MODE" = "single" ]; then

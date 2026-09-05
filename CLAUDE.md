@@ -216,15 +216,21 @@ chemins temp partagés. Mocks NVS via fake implementations dans le test.
 
 ## Workflow anti-régression (OBLIGATOIRE)
 
-Source unique de vérité : `scripts/check.sh` (scaffold tripwire v0.10.1 ;
-`--host-only`/`--board` sont des alias conservés de `--fast`/`--variant`).
-- `./scripts/check.sh --host-only` — tests host (~secondes)
-- `./scripts/check.sh --board <name>` — host + build d'un board
-- `./scripts/check.sh` — host + build des 6 boards (sdkconfig isolé par board)
+Source unique de vérité : `scripts/check.sh` (scaffold tripwire v0.13.0 ;
+`--host-only`/`--board` sont des alias conservés de `--fast`/`--variant`,
+déclarés dans `.tripwire-divergences`).
+- `./scripts/check.sh --fast` — tests host CMake (~secondes)
+- `./scripts/check.sh --variant <name>` — fast + build d'un board
+- `./scripts/check.sh` — fast + les 7 boards (sdkconfig isolé par board)
 - Skip-si-déjà-vert : état inchangé depuis le dernier vert → sortie immédiate ;
   `--force` pour relancer quand même.
 - Sur rouge : le détail de la commande fautive est dans
   `.git/tripwire/last-fail.log` — le lire au lieu de relancer le build.
+- **Sans `idf.py` dans le PATH** (hors devshell Nix), la phase de build se
+  **saute en l'annonçant** au lieu de rendre rouge : un rouge qui veut dire
+  « toolchain absente » est indiscernable d'un rouge qui veut dire « code
+  cassé », et finit par ne plus être lu. Pour un check complet, lancer
+  `./scripts/check.sh` dans le devshell.
 
 **Activation des hooks git (une fois par clone)** :
 ```bash
@@ -232,10 +238,31 @@ Source unique de vérité : `scripts/check.sh` (scaffold tripwire v0.10.1 ;
 ```
 `pre-push` lance le check complet et bloque le push si rouge. WIP : `git push --no-verify`.
 
-**Hooks Claude Code** (`.claude/settings.json`, automatiques) :
-- `PostToolUse` sur édition de `.c/.h` dans `main/`, `boards/`, `test/` → tests host.
-- `Stop` → host + build du board courant (lu dans `.kase-board`). Si ESP-IDF n'est pas sourcé, dégrade en tests host seuls.
-Changer de board courant : `echo kase_v1 > .kase-board`.
+**Hooks Claude Code** (`.claude/settings.json`, automatiques). Échelle de
+gravité : **pendant → informe, à la conclusion → bloque, au push → bloque.**
+- `PostToolUse` sur édition de `.c/.h` dans `main/`, `boards/`, `test/` →
+  `check.sh --fast`, en **avis non bloquant**. Il signale le rouge sans
+  interrompre : la norme TDD impose d'écrire l'assertion rouge AVANT
+  l'implémentation, et bloquer là ferait sonner l'alarme à chaque pas correct.
+  Un avis n'est pas à ignorer pour autant.
+- `Stop` → `check.sh --fast` et il **bloque** : on ne conclut pas un tour sur du
+  rouge. Le build des 7 boards n'est PAS relancé à chaque fin de tour, il reste
+  garanti au pre-push.
+- `pre-push` → check complet, **bloquant**.
+
+Un rouge de Stop ou de pre-push ne s'ignore jamais et ne se contourne pas par
+`--no-verify` sans raison écrite.
+
+Board courant (lu par `cc_session_start.sh`) : `echo kase_v1 > .kase-board`.
+
+**Divergences déclarées** : `.tripwire-divergences` (committé) liste les écarts
+assumés au scaffold standard. Une ligne `fichier<TAB>motif<TAB>pourquoi` ;
+`check.sh` rend rouge la disparition d'un motif déclaré. Le fichier hôte doit
+être **suivi par git** : un fichier gitignoré ne change pas l'empreinte du
+skip-si-déjà-vert, donc sa perte peut passer sous un « déjà vert — skip ».
+**Limite** : un écart non déclaré n'est protégé par rien et le prochain
+re-scaffold l'effacera — toute divergence délibérée se déclare au moment où on
+l'introduit.
 
 **Jamais** builder deux boards dans le même `build/` avec le `sdkconfig` racine
 (fuite de config). Toujours `-B build_<board> -DSDKCONFIG=build_<board>/sdkconfig`.
@@ -243,7 +270,8 @@ Changer de board courant : `echo kase_v1 > .kase-board`.
 ### Norme TDD — nouvelle logique pure
 Toute nouvelle fonction de logique pure (keymap, layers, combo, tap-hold,
 parsing CDC, encoding keycodes…) : test host écrit **d'abord**, ajouté à
-`test/CMakeLists.txt` + déclaré dans `test/test_main.c`. Invoquer l'agent
+`test/CMakeLists.txt` + déclaré dans `test/test_main.c`. Le test doit être rouge
+avant l'implémentation, vert après, et parallel-safe. Invoquer l'agent
 `kase-test-author`.
 
 ### Économie de modèles (subagents)
@@ -255,7 +283,7 @@ mais seulement là où un oracle rattrape l'erreur :
 - **Jamais en dessous de sonnet** : review, audit, debug, **et l'écriture
   d'assertions de test** — une assertion tautologique ou un verdict halluciné
   passent l'oracle mécanique au vert. Le jugement ne descend pas en gamme.
-- Toute tâche économique DOIT finir par `./scripts/check.sh --host-only` vert, et
+- Toute tâche économique DOIT finir par `./scripts/check.sh --fast` vert, et
   un test rewiré/écrit DOIT prouver qu'il mord (bug transitoire → rouge → revert).
 
 ### Quand invoquer les agents kase-*
