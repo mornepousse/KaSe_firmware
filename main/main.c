@@ -26,8 +26,13 @@
 #include "hid_bluetooth_manager.h"   /* real API, or no-op stubs when HAS_BLE off */
 #include "keyboard_task.h"
 #include "led_strip_anim.h"
-#include "matrix_scan.h"
 #include "status_display.h"
+#endif
+
+/* matrix_scan.h suit la matrice, pas le rôle : la moitié droite du Niphargus
+ * scanne aussi (KASE_HAS_LOCAL_MATRIX) sans être un clavier complet. */
+#if CONFIG_KASE_HAS_LOCAL_MATRIX
+#include "matrix_scan.h"
 #endif
 
 #if CONFIG_KASE_KBD_WIRELESS
@@ -365,6 +370,21 @@ void app_main(void) {
     if (err != ESP_OK)
       ESP_LOGE(TAG, "mouse_task_start a echoue : %s", esp_err_to_name(err));
   }
+#elif CONFIG_KASE_DEVICE_ROLE_NIPHAR_SLAVE
+  /* --- Moitié DROITE du Niphargus : un scanner, rien d'autre. ---
+   *
+   * La spec la décrit comme « un scanner qui remonte sa matrice brute » : elle
+   * n'a ni moteur keymap, ni sortie HID — c'est la gauche qui porte les deux.
+   * On initialise donc le scan et rien de plus. Le pilote keyboard_button crée
+   * sa propre tâche et rappelle notre callback ; aucune tâche à créer ici.
+   *
+   * Sans cet appel, activer KASE_HAS_LOCAL_MATRIX compilait le module sans
+   * jamais l'initialiser : la matrice restait muette et le brochage
+   * invérifiable. L'émission vers la gauche est le ressort de B3, pas encore
+   * écrite. */
+  ESP_LOGI(TAG, "Role esclave Niphargus : scan matrice seul");
+  rtc_matrix_deinit();
+  matrix_setup();
 #endif /* device role */
 
 #if CONFIG_KASE_DEVICE_ROLE_KEYBOARD

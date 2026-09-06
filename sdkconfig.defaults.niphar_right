@@ -18,3 +18,11 @@ CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Bring-up 2026-09-05 : la droite scanne desormais sa matrice, et chaque
+# changement sort en clair sur la console du connecteur de prog. C'est le seul
+# moyen de verifier la table de brochage DROITE contre le contrat materiel —
+# elle differe de la gauche par des permutations de routage, et aucune
+# compilation ne detecte une inversion (risque R3 de la spec).
+# A retirer une fois le brochage valide : trop lent pour de la frappe reelle.
+CONFIG_KASE_MATRIX_LOG_CONSOLE=y

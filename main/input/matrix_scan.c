@@ -12,7 +12,9 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#if CONFIG_KASE_HAS_DISPLAY
 #include "status_display.h"
+#endif
 #include "driver/gpio.h"
 #include "esp_sleep.h"
 
@@ -121,8 +123,20 @@ static void keyboard_btn_cb(keyboard_btn_handle_t kbd_handle, keyboard_btn_repor
         }
     }
 
+    /* ⚠ Le #if entoure la boucle ENTIÈRE, accolades comprises. Ne l'appliquer
+     * qu'au corps d'un `for` sans accolades ferait de l'instruction suivante ce
+     * corps — ici le memcpy de prev_matrix_state, qui cesserait alors d'être
+     * exécuté dès qu'un cycle ne compte aucun nouvel appui. Observé au banc sur
+     * la moitié droite : chaque relâchement était signalé deux fois.
+     *
+     * La moitié droite du Niphargus scanne sans écran (module non compilé) : le
+     * lien échouait sur ce seul symbole. Même cas que v2d_sleep.c. */
+#if CONFIG_KASE_HAS_DISPLAY
     for (uint8_t k = 0; k < new_keypresses; k++)
         status_display_notify_keypress();
+#else
+    (void)new_keypresses;
+#endif
 
     memcpy(prev_matrix_state, new_state, sizeof(prev_matrix_state));
     matrix_flag_signal(&stat_matrix_changed);
