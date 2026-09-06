@@ -144,8 +144,8 @@ boards/
   kase_v2/              # I2C OLED (SSD1306)
   kase_v2_debug/        # V2 + debug/wireless GPIO overrides (V2D)
   kase_dongle/          # USB receiver — no matrix, no keymap, no engine
-  niphar_left/          # Niphargus master: engine + trackpad (no hardware yet)
-  niphar_right/         # Niphargus scanner: matrix + Sharp LCD (no hardware yet)
+  niphar_left/          # Niphargus master: engine + trackpad (trackpad driver TODO)
+  niphar_right/         # Niphargus scanner: matrix + Sharp LCD (LCD driver TODO)
 main/
   input/                # Matrix scan, key processing, HID reports
     keyboard_task.c     # Main coordinator (ISR → process → send)
