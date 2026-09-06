@@ -43,9 +43,16 @@ static void test_keymap_couvre_les_deux_moities(void)
 
 static void test_les_tailles_derivees_suivent(void)
 {
-    /* REPORT_LEN et REPORT_COUNT_BYTES dimensionnent le rapport de touches et
-     * les statistiques de frappe. Ils doivent suivre la keymap, pas le
-     * balayage — sinon la moitie droite n'aurait ni report ni statistiques. */
+    /* ⚠ Ces deux macros ne sont utilisees NULLE PART aujourd'hui (verifie au
+     * grep) : elles sont mortes. On les verrouille tout de meme sur la keymap,
+     * parce que leur nom promet de dimensionner un rapport de touches — et le
+     * jour ou quelqu'un s'en servira, il vaut mieux qu'elles couvrent les 52
+     * touches que les 26 balayees.
+     *
+     * Les statistiques de frappe, elles, suivent la matrice BALAYEE :
+     * key_stats est dimensionne en MATRIX_COLS, et boucler dessus en
+     * KEYMAP_COLS a produit un depassement de tableau que le compilateur a
+     * attrape (cdc_binary_cmds.c, « iteration 7 invokes undefined behavior »). */
     TEST_ASSERT_EQ(REPORT_COUNT_BYTES, MATRIX_ROWS * KEYMAP_COLS,
                    "les stats couvrent la keymap entiere");
     TEST_ASSERT_EQ(REPORT_LEN, MOD_LED_BYTES + MATRIX_ROWS * KEYMAP_COLS,

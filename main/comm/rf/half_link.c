@@ -4,6 +4,7 @@
 #include "rf_packet.h"
 #include "rf_slot.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
@@ -64,11 +65,25 @@ bool half_link_tx_init(void)
             if (half_link_tx_matrix(bm)) ok++;
             vTaskDelay(pdMS_TO_TICKS(20));
         }
-        if (ok == 0)
+        if (ok == 0) {
             ESP_LOGE(TAG, "epreuve : 0/%d acquittes — PERSONNE N'ECOUTE sur ch=0x%02X",
                      N, cfg.channel);
-        else
+        } else {
             ESP_LOGW(TAG, "epreuve : %d/%d acquittes — LA GAUCHE ECOUTE", ok, N);
+            /* LA mesure de R1. L'acquittement seul ne dit rien de la surdite :
+             * l'ESB retransmet jusqu'a 15 fois, donc un paquet passe meme si la
+             * gauche etait sourde au premier essai. Ce qui trahit la surdite,
+             * c'est le NOMBRE DE RETRANSMISSIONS — chaque excursion PRX->PTX de
+             * la gauche coute un essai perdu a la droite.
+             *
+             * Un ratio proche de zero veut dire que la bascule ne se voit pas ;
+             * un ratio eleve mesure exactement ce que le pari coute. */
+            if (rf_tx_count)
+                ESP_LOGW(TAG, "R1 : %u retransmissions pour %u paquets = %u.%02u par paquet",
+                         (unsigned)rf_tx_retr_sum, (unsigned)rf_tx_count,
+                         (unsigned)(rf_tx_retr_sum / rf_tx_count),
+                         (unsigned)((rf_tx_retr_sum * 100 / rf_tx_count) % 100));
+        }
     }
     return true;
 }
@@ -107,13 +122,52 @@ static void half_link_rx_task(void *arg)
 {
     (void)arg;
     uint8_t buf[32];
-    uint32_t recus = 0, rejetes = 0;
+    uint32_t recus = 0, rejetes = 0, perdus = 0, excursions = 0;
+    bool seq_amorce = false;
+    uint8_t seq_attendu = 0;
+#if CONFIG_KASE_HALF_LINK_R1
+    /* Adresse du dongle, slot clavier — cible des excursions. */
+    const uint8_t addr_dongle[5] = { 'K', 'a', 'S', 'e', 0x01 };
+    const uint8_t addr_lien[5]   = { 'K', 'a', 'S', 'e', RF_ADDR_HALF_LINK };
+    uint32_t derniere_excursion = 0;
+#endif
     for (;;) {
+#if CONFIG_KASE_HALF_LINK_R1
+        /* ÉPREUVE R1. La gauche est sourde pendant qu'elle émet : on provoque
+         * l'excursion à cadence fixe et on mesure ce qu'elle coûte en trous de
+         * séquence. rf_driver_oob_tx fait le PRX→PTX→PRX complet, y compris la
+         * restauration du canal d'écoute et le CE haut.
+         *
+         * 20 ms, soit 50 excursions/s : au-delà de ce qu'un clavier produit en
+         * frappe rapide, donc un majorant honnête du coût. */
+        uint32_t maintenant = (uint32_t)(esp_timer_get_time() / 1000);
+        if (maintenant - derniere_excursion >= 20) {
+            derniere_excursion = maintenant;
+            uint8_t bidon[9] = { 0x50, 0, 0, 0, 0, 0, 0, 0, 0 };
+            rf_driver_oob_tx(&s_radio, RF_CH_KBD_DONGLE, addr_dongle,
+                             bidon, sizeof(bidon),
+                             RF_CH_HALF_LINK, addr_lien);
+            excursions++;
+        }
+#endif
         if (rf_driver_rx_available(&s_radio)) {
             uint16_t n = rf_driver_read_rx(&s_radio, buf, sizeof(buf));
             rf_heartbeat_t h;
             if (n && rf_decode_heartbeat(buf, n, &h)) {
                 recus++;
+                /* Trous de séquence : le seul témoin de ce que l'excursion
+                 * coûte. seq est un octet, l'écart se calcule donc modulo 256. */
+                if (seq_amorce) {
+                    uint8_t ecart = (uint8_t)(h.seq - seq_attendu);
+                    if (ecart) perdus += ecart;
+                }
+                seq_amorce = true;
+                seq_attendu = (uint8_t)(h.seq + 1);
+                if ((recus % 20) == 0)
+                    ESP_LOGW(TAG, "R1 : %u recus, %u perdus (%u%%), %u excursions",
+                             (unsigned)recus, (unsigned)perdus,
+                             (unsigned)(perdus * 100 / (recus + perdus)),
+                             (unsigned)excursions);
                 /* Journal de banc : on affiche les coordonnees pressees plutot
                  * que le bitmap brut, pour pouvoir comparer a ce qu'on presse
                  * physiquement sur la droite. */

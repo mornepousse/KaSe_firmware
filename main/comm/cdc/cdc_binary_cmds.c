@@ -389,8 +389,18 @@ static void bin_cmd_keystats_bin(uint8_t cmd, const uint8_t *p, uint16_t l)
     uint8_t hdr[2] = { (uint8_t)MATRIX_ROWS, (uint8_t)MATRIX_COLS };
     ks_respond_write(hdr, 2);
 
+    /* MATRIX_COLS et non KEYMAP_COLS : key_stats est dimensionne sur la matrice
+     * BALAYEE ([MATRIX_ROWS][MATRIX_COLS]), pas sur la keymap. Boucler sur
+     * KEYMAP_COLS lisait sept mots au-dela de chaque rangee et ecrivait le
+     * double de la taille annoncee juste au-dessus — le compilateur l'a
+     * signale (« iteration 7 invokes undefined behavior »).
+     *
+     * Etendre les statistiques aux 52 touches supposerait de redimensionner
+     * key_stats ET de decider ce qu'on compte pour une moitie droite dont les
+     * appuis arrivent par radio : c'est une decision a part, pas un effet de
+     * bord de l'elargissement de la keymap. */
     for (int r = 0; r < MATRIX_ROWS; r++) {
-        for (int c = 0; c < KEYMAP_COLS; c++) {
+        for (int c = 0; c < MATRIX_COLS; c++) {
             uint8_t b[4];
             pack_u32_le(b, key_stats[r][c]);
             ks_respond_write(b, 4);

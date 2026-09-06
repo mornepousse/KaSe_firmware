@@ -102,6 +102,23 @@ config KASE_HALF_LINK_RX
         est l'etape suivante. On prouve d'abord que le lien porte — sinon un
         echec de bascule serait indiscernable d'un lien qui ne marche pas.
 
+config KASE_HALF_LINK_R1
+    bool "Epreuve R1 : la gauche emet-elle sans devenir sourde ?"
+    default n
+    depends on KASE_HALF_LINK_RX
+    help
+        Le pari central du design (§2.3, risque R1) : la moitie gauche ecoute la
+        droite en PRX et bascule en PTX vers le dongle sur evenement. Elle est
+        sourde pendant qu'elle emet.
+
+        Cette epreuve provoque l'excursion PRX->PTX->PRX a cadence fixe (20 ms,
+        soit 50/s, au-dela de ce qu'une frappe rapide produit) et compte les
+        trous dans les numeros de sequence de la droite. Le taux de perte
+        mesure directement le cout de la bascule.
+
+        Diagnostic de banc : la cible des excursions est un paquet bidon, pas du
+        HID reel.
+
 config KASE_RF_FORCE_ROUTE
     bool "Forcer le HID sur la radio meme quand l'USB est branche"
     default n
