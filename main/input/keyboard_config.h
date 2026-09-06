@@ -21,7 +21,14 @@
 #define MAX_LAYER (LAYERS-1)
 #define MOD_LED_BYTES 2
 #if !CONFIG_KASE_DEVICE_ROLE_DONGLE
+/* Colonnes couvertes par la KEYMAP, à distinguer de MATRIX_COLS qui compte
+ * celles que la carte BALAIE. Elles diffèrent sur la moitié maître d'un split :
+ * la gauche du Niphargus scanne 7 colonnes mais porte les keycodes des 14, la
+ * droite n'étant qu'un scanner sans moteur keymap. Un board.h peut donc la
+ * surcharger ; par défaut les deux notions coïncident. */
+#ifndef KEYMAP_COLS
 #define KEYMAP_COLS MATRIX_COLS
+#endif
 #define REPORT_LEN (MOD_LED_BYTES+MATRIX_ROWS*KEYMAP_COLS)
 #define REPORT_COUNT_BYTES (MATRIX_ROWS*KEYMAP_COLS)
 #endif

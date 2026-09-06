@@ -1,7 +1,13 @@
-/* Keymap par défaut — Niphargus moitié gauche.
- * 26 touches : rangées de 7/7/6/6. Les positions manquantes des deux dernières
- * rangées sont K_NO. La vraie keymap est provisionnée par USB (KS_CMD_*) ;
- * celle-ci n'est que le repli d'usine. */
+/* Keymap par défaut — Niphargus, LES DEUX moitiés.
+ *
+ * La gauche est le seul moteur keymap du clavier : elle porte les keycodes des
+ * 52 touches alors qu'elle n'en balaie que 26. D'où KEYMAP_COLS = 14 quand
+ * MATRIX_COLS vaut 7 — colonnes 0-6 pour cette moitié, 7-13 pour la droite,
+ * dont la coordonnée reçue par radio se décale de MATRIX_COLS.
+ *
+ * 26 touches par moitié, en rangées de 7/7/6/6 : les positions manquantes des
+ * deux dernières rangées sont K_NO, de chaque côté. La vraie keymap est
+ * provisionnée par USB (KS_CMD_*) ; celle-ci n'est que le repli d'usine. */
 #include "keymap.h"
 #include "key_definitions.h"
 #include "keyboard_config.h"
@@ -14,18 +20,22 @@ char default_layout_names[LAYERS][MAX_LAYOUT_NAME_LENGTH] = {
 #define _______ K_TRNS
 #define XXXXXXX K_NO
 
-uint16_t keymaps[LAYERS][MATRIX_ROWS][MATRIX_COLS] = {
-    {   /* 0 — MAIN */
-        {K_TAB,   K_Q, K_W, K_E, K_R, K_T, K_LBRC},
-        {K_ESC,   K_A, K_S, K_D, K_F, K_G, K_RBRC},
-        {K_LSHIFT,K_Z, K_X, K_C, K_V, K_B, XXXXXXX},
-        {K_LCTRL, K_LWIN, K_LALT, MO_L1, K_SPACE, K_ENT, XXXXXXX},
+uint16_t keymaps[LAYERS][MATRIX_ROWS][KEYMAP_COLS] = {
+    {   /* 0 — MAIN            ── gauche (0-6) ──          ── droite (7-13) ── */
+        {K_TAB,   K_Q, K_W, K_E, K_R, K_T, K_LBRC,   K_Y, K_U, K_I, K_O, K_P,    K_BSPC,   K_DEL},
+        {K_ESC,   K_A, K_S, K_D, K_F, K_G, K_RBRC,   K_H, K_J, K_K, K_L, K_SCLN, K_QUOT,   K_ENT},
+        {K_LSHIFT,K_Z, K_X, K_C, K_V, K_B, XXXXXXX,  K_N, K_M, K_COMM, K_DOT, K_SLSH, K_RSHIFT, XXXXXXX},
+        {K_LCTRL, K_LWIN, K_LALT, MO_L1, K_SPACE, K_ENT, XXXXXXX,
+                                                    K_SPACE, MO_L1, K_RALT, K_RCTRL, XXXXXXX, XXXXXXX, XXXXXXX},
     },
     {   /* 1 — NAV */
-        {_______, K_1, K_2, K_3, K_4, K_5, XXXXXXX},
-        {_______, K_F1, K_HOME, K_UP, K_END, XXXXXXX, XXXXXXX},
-        {_______, XXXXXXX, K_LEFT, K_DOWN, K_RIGHT, XXXXXXX, XXXXXXX},
-        {_______, _______, _______, _______, _______, XXXXXXX, XXXXXXX},
+        {_______, K_1, K_2, K_3, K_4, K_5, XXXXXXX,  K_6, K_7, K_8, K_9, K_0, _______, _______},
+        {_______, K_F1, K_HOME, K_UP, K_END, XXXXXXX, XXXXXXX,
+                                                    XXXXXXX, K_LEFT, K_DOWN, K_UP, K_RIGHT, XXXXXXX, XXXXXXX},
+        {_______, XXXXXXX, K_LEFT, K_DOWN, K_RIGHT, XXXXXXX, XXXXXXX,
+                                                    XXXXXXX, K_HOME, K_END, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX},
+        {_______, _______, _______, _______, _______, XXXXXXX, XXXXXXX,
+                                                    _______, _______, _______, _______, XXXXXXX, XXXXXXX, XXXXXXX},
     },
     {{XXXXXXX}}, {{XXXXXXX}}, {{XXXXXXX}}, {{XXXXXXX}},
     {{XXXXXXX}}, {{XXXXXXX}}, {{XXXXXXX}}, {{XXXXXXX}},

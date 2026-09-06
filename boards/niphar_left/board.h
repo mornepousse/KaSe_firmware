@@ -59,6 +59,12 @@
 #define MATRIX_ROWS  4
 #define MATRIX_COLS  7
 
+/* La gauche est le SEUL moteur keymap du clavier : elle porte les keycodes des
+ * 52 touches alors qu'elle n'en balaie que 26. Colonnes 0-6 = cette moitié,
+ * 7-13 = la droite, dont la coordonnée reçue se décale de MATRIX_COLS.
+ * Verrouillé par test/test_niphar_keymap_span.c. */
+#define KEYMAP_COLS  14
+
 /* ── Radio nRF24L01+ (SPI2, partagé avec l'écran côté droit) ── */
 #define BOARD_NRF_SPI_HOST   SPI2_HOST
 #define BOARD_NRF_SCK        GPIO_NUM_38

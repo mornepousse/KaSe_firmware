@@ -123,12 +123,12 @@ static void bin_cmd_keymap_get(uint8_t cmd, const uint8_t *p, uint16_t l)
         return;
     }
 
-    uint16_t total = 1 + MATRIX_ROWS * MATRIX_COLS * 2; /* layer_idx + keycodes */
+    uint16_t total = 1 + MATRIX_ROWS * KEYMAP_COLS * 2; /* layer_idx + keycodes */
     ks_respond_begin(cmd, KS_STATUS_OK, total);
     ks_respond_write(&layer, 1);
 
     for (int r = 0; r < MATRIX_ROWS; r++) {
-        for (int c = 0; c < MATRIX_COLS; c++) {
+        for (int c = 0; c < KEYMAP_COLS; c++) {
             uint8_t b[2];
             pack_u16_le(b, keymaps[layer][r][c]);
             ks_respond_write(b, 2);
@@ -144,14 +144,14 @@ static void bin_cmd_setkey(uint8_t cmd, const uint8_t *p, uint16_t l)
     uint8_t layer = p[0], row = p[1], col = p[2];
     uint16_t value = p[3] | ((uint16_t)p[4] << 8);
 
-    if (layer >= LAYERS || row >= MATRIX_ROWS || col >= MATRIX_COLS) {
+    if (layer >= LAYERS || row >= MATRIX_ROWS || col >= KEYMAP_COLS) {
         ks_respond_err(cmd, KS_STATUS_ERR_RANGE);
         return;
     }
 
     keymaps[layer][row][col] = value;
     if (!save_keymaps((uint16_t *)keymaps,
-                 (size_t)LAYERS * MATRIX_ROWS * MATRIX_COLS * sizeof(uint16_t))) {
+                 (size_t)LAYERS * MATRIX_ROWS * KEYMAP_COLS * sizeof(uint16_t))) {
         ks_respond_err(cmd, KS_STATUS_ERR_STORAGE); return;
     }
     ks_respond_ok(cmd);
@@ -160,7 +160,7 @@ static void bin_cmd_setkey(uint8_t cmd, const uint8_t *p, uint16_t l)
 /* SETLAYER: payload [layer:u8][keycodes: ROWS*COLS * u16 LE] */
 static void bin_cmd_setlayer(uint8_t cmd, const uint8_t *p, uint16_t l)
 {
-    size_t expected = 1 + MATRIX_ROWS * MATRIX_COLS * 2;
+    size_t expected = 1 + MATRIX_ROWS * KEYMAP_COLS * 2;
     if (l < expected) { ks_respond_err(cmd, KS_STATUS_ERR_INVALID); return; }
 
     uint8_t layer = p[0];
@@ -168,14 +168,14 @@ static void bin_cmd_setlayer(uint8_t cmd, const uint8_t *p, uint16_t l)
 
     const uint8_t *data = p + 1;
     for (int r = 0; r < MATRIX_ROWS; r++) {
-        for (int c = 0; c < MATRIX_COLS; c++) {
-            size_t off = (r * MATRIX_COLS + c) * 2;
+        for (int c = 0; c < KEYMAP_COLS; c++) {
+            size_t off = (r * KEYMAP_COLS + c) * 2;
             uint16_t val = data[off] | ((uint16_t)data[off + 1] << 8);
             keymaps[layer][r][c] = val;
         }
     }
     bool saved = save_keymaps((uint16_t *)keymaps,
-                 (size_t)LAYERS * MATRIX_ROWS * MATRIX_COLS * sizeof(uint16_t));
+                 (size_t)LAYERS * MATRIX_ROWS * KEYMAP_COLS * sizeof(uint16_t));
     if (layer == current_layout)
         status_display_update_layer_name();
     if (!saved) { ks_respond_err(cmd, KS_STATUS_ERR_STORAGE); return; }
@@ -390,7 +390,7 @@ static void bin_cmd_keystats_bin(uint8_t cmd, const uint8_t *p, uint16_t l)
     ks_respond_write(hdr, 2);
 
     for (int r = 0; r < MATRIX_ROWS; r++) {
-        for (int c = 0; c < MATRIX_COLS; c++) {
+        for (int c = 0; c < KEYMAP_COLS; c++) {
             uint8_t b[4];
             pack_u32_le(b, key_stats[r][c]);
             ks_respond_write(b, 4);

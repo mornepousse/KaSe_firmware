@@ -6,7 +6,9 @@
  * position, ni état de matrice. Déclarer ces symboles chez eux obligerait leur
  * carte à inventer des dimensions — c'est ce que leurs board.h ne font pas. */
 #if !CONFIG_KASE_NO_KEYMAP_ENGINE
-extern uint16_t keymaps[][MATRIX_ROWS][MATRIX_COLS];
+/* KEYMAP_COLS, pas MATRIX_COLS : sur la moitié maître d'un split la keymap
+ * couvre les deux moitiés alors que le balayage n'en couvre qu'une. */
+extern uint16_t keymaps[][MATRIX_ROWS][KEYMAP_COLS];
 extern char default_layout_names[LAYERS][MAX_LAYOUT_NAME_LENGTH];
 #endif
 
