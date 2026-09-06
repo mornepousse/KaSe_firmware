@@ -1,6 +1,7 @@
 #include "rf_probe.h"
 #include "board.h"
 #include "rf_driver.h"
+#include "rf_slot.h"   /* plan de canaux */
 #include "esp_log.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
@@ -119,11 +120,43 @@ void rf_probe_run(void)
     rf_probe_lines();
 
     static rf_radio_t radio;
-    esp_err_t e = rf_driver_init(&radio, &cfg);
 
+#if CONFIG_KASE_HAS_RF_TX
+    /* Epreuve d'EMISSION. rf_driver_init_tx() fait aussi la lecture de
+     * registres, donc pas de double init du bus SPI.
+     *
+     * Sans recepteur sur le canal, chaque envoi finit en MAX_RT — c'est
+     * attendu, et ca reste informatif : l'emetteur a bel et bien tourne, il a
+     * consomme ses retransmissions, et surtout LA CARTE A TENU. C'est le vrai
+     * enjeu quand elle est alimentee par le LDO d'une sonde FTDI : une chute de
+     * tension sous les pointes d'emission se verrait par un redemarrage. */
+    cfg.channel     = RF_CH_HALF_LINK;
+    cfg.addr_suffix = RF_ADDR_HALF_LINK;
+    esp_err_t e = rf_driver_init_tx(&radio, &cfg);
+    if (e != ESP_OK || !radio.present) {
+        ESP_LOGW(TAG, "=== PAS DE REPONSE (err=%s) ===", esp_err_to_name(e));
+        return;
+    }
+    ESP_LOGW(TAG, "=== LA RADIO REPOND (init PTX OK, ch=%u) ===", cfg.channel);
+
+    const int N = 20;
+    uint8_t pkt[8] = { 0xA5, 0, 0, 0, 0, 0, 0, 0 };
+    int acked = 0;
+    uint32_t max_rt_avant = rf_tx_max_rt_count;
+    for (int i = 0; i < N; i++) {
+        pkt[1] = (uint8_t)i;
+        if (rf_driver_send(&radio, pkt, sizeof(pkt))) acked++;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    ESP_LOGW(TAG, "=== rafale TX : %d/%d acquittes, %u MAX_RT ===",
+             acked, N, (unsigned)(rf_tx_max_rt_count - max_rt_avant));
+    ESP_LOGW(TAG, "=== la carte a survecu a la rafale ===");
+#else
+    esp_err_t e = rf_driver_init(&radio, &cfg);
     if (e == ESP_OK && radio.present)
         ESP_LOGW(TAG, "=== LA RADIO REPOND (init PRX OK) ===");
     else
         ESP_LOGW(TAG, "=== PAS DE REPONSE (err=%s) — voir la ligne 'probe csn=' "
                       "ci-dessus pour les valeurs lues ===", esp_err_to_name(e));
+#endif
 }

@@ -200,6 +200,7 @@ config KASE_VBUS_SENSE
 config KASE_HAS_RF_TX
     bool
     default y if KASE_DEVICE_ROLE_MOUSE
+    default y if KASE_DEVICE_ROLE_NIPHAR_SLAVE
     default n
     help
         Compile le mode ÉMETTEUR (PTX) du driver nRF24 : rf_driver_init_tx,
