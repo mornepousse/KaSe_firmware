@@ -5,7 +5,7 @@
 #include "key_stats.h"
 #include "keyboard_config.h"
 #include "cdc_binary_protocol.h"
-#if CONFIG_KASE_HALF_LINK_TX
+#if CONFIG_KASE_HALF_LINK_TX || CONFIG_KASE_HALF_LINK_RX
 #include "half_link.h"
 #include "rf_packet.h"
 #endif
@@ -39,6 +39,45 @@ uint8_t keycodes[MAX_REPORT_KEYS];
 uint8_t current_press_row[MAX_REPORT_KEYS];
 uint8_t current_press_col[MAX_REPORT_KEYS];
 uint8_t current_press_stat[MAX_REPORT_KEYS];
+
+#if CONFIG_KASE_HALF_LINK_RX
+/* Frontière entre les entrées du balayage LOCAL et celles reçues par radio.
+ * Tout ce qui est au-delà appartient à la moitié distante et se reconstruit à
+ * chaque appel de matrix_apply_remote(). */
+static uint8_t s_filled_local;
+
+/* Fusion des deux moitiés — IDEMPOTENTE, donc appelable à chaque cycle.
+ *
+ * Elle doit l'être : le callback de scan ne tourne que sur activité LOCALE, or
+ * un appui sur la seule moitié droite n'en produit aucune. Sans un appel
+ * périodique depuis la tâche clavier, les touches reçues par radio
+ * n'atteindraient jamais le moteur — c'est le défaut qui faisait que la droite
+ * ne tapait rien alors que son lien était acquitté.
+ *
+ * Les touches distantes sont décalées de MATRIX_COLS : colonnes 0-6 cette
+ * moitié, 7-13 l'autre. Le moteur ne sait pas d'où elles viennent, il indexe
+ * keymaps[layer][row][col] et rien d'autre.
+ *
+ * Le plafond MAX_REPORT_KEYS est respecté, et les touches locales gardent la
+ * priorité puisqu'elles occupent le début du tableau. */
+void matrix_apply_remote(void)
+{
+    uint8_t filled = s_filled_local;
+    for (uint8_t i = filled; i < MAX_REPORT_KEYS; i++) {
+        current_press_row[i]  = INVALID_KEY_POS;
+        current_press_col[i]  = INVALID_KEY_POS;
+        current_press_stat[i] = 0;
+    }
+    for (uint8_t r = 0; r < MATRIX_ROWS && filled < MAX_REPORT_KEYS; r++)
+        for (uint8_t c = 0; c < MATRIX_COLS && filled < MAX_REPORT_KEYS; c++)
+            if (half_link_remote_pressed(r, c)) {
+                current_press_row[filled]  = r;
+                current_press_col[filled]  = (uint8_t)(c + MATRIX_COLS);
+                current_press_stat[filled] = 1;
+                filled++;
+            }
+}
+#endif
 volatile uint8_t stat_matrix_changed = 0;
 uint8_t last_layer = 0;
 uint8_t current_layout = 0;
@@ -158,6 +197,10 @@ static void keyboard_btn_cb(keyboard_btn_handle_t kbd_handle, keyboard_btn_repor
      * La moitié droite du Niphargus scanne sans écran (module non compilé) : le
      * lien échouait sur ce seul symbole. Même cas que v2d_sleep.c. */
 #if CONFIG_KASE_HAS_DISPLAY
+#if CONFIG_KASE_HALF_LINK_RX
+    s_filled_local = filled;   /* frontiere local / distant, pour la fusion */
+    matrix_apply_remote();
+#endif
     for (uint8_t k = 0; k < new_keypresses; k++)
         status_display_notify_keypress();
 #else

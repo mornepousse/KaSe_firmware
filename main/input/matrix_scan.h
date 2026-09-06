@@ -27,6 +27,13 @@ extern uint8_t keycodes[6];
 extern uint8_t current_press_row[6];
 extern uint8_t current_press_col[6];
 extern uint8_t current_press_stat[6];
+
+#if CONFIG_KASE_HALF_LINK_RX
+/* Rejoue la fusion des touches reçues de la moitié distante. Idempotente :
+ * la tâche clavier l'appelle à chaque cycle, car le callback de scan ne tourne
+ * que sur activité locale. */
+void matrix_apply_remote(void);
+#endif
 extern volatile uint8_t stat_matrix_changed; /* written in ISR, read in task */
 extern uint8_t last_layer;
 /* current_layout: declared in keyboard_config.h */

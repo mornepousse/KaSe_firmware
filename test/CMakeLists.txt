@@ -67,6 +67,7 @@ add_executable(test_runner
     test_kbd_refresh.c
     test_niphar_keymap_span.c
     test_rf_channel_plan.c
+    test_half_state.c
     test_oled_nav.c
     ../main/display/oled/oled_nav.c
     test_niphar_left_pins.c

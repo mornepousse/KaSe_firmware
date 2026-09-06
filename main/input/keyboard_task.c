@@ -5,6 +5,9 @@
 #include "hid_report.h"
 #include "keyboard_actions.h"
 #include "matrix_scan.h"
+#if CONFIG_KASE_HALF_LINK_RX
+#include "half_link.h"
+#endif
 #include "matrix_flag.h"   /* test-and-clear du drapeau — audit F3 */
 #include "tap_hold.h"
 #include "tap_dance.h"
@@ -12,6 +15,7 @@
 #include "leader.h"
 #include "key_features.h"
 #include "keymap.h"
+#include "matrix_scan.h"
 #include "hid_transport.h"
 #include "usb_hid.h"        /* usb_try_remote_wakeup */
 #if CONFIG_KASE_KBD_WIRELESS
@@ -55,6 +59,20 @@ void vTaskKeyboard(void *pvParameters)
         /* Tick timers — even without matrix change */
         tap_hold_tick();
         tap_dance_tick();
+
+#if CONFIG_KASE_HALF_LINK_RX
+        /* Fusion de la moitié distante. On n'agit QUE si l'état distant a
+         * changé : le chemin local a sa propre émission, et rebâtir le rapport
+         * à chaque cycle écrasait la frappe de la moitié gauche.
+         *
+         * Le callback de scan ne tourne que sur activité locale — un appui sur
+         * la seule moitié droite n'en produit aucune — d'où cet appel ici. */
+        if (half_link_remote_changed()) {
+            matrix_apply_remote();
+            build_keycode_report();
+            send_hid_key();
+        }
+#endif
 
         /* Matrix test mode auto-exit (runs even if no key pressed) */
         extern volatile bool matrix_test_mode;

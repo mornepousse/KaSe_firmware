@@ -12,6 +12,8 @@
 static const char *TAG = "half_link";
 
 static rf_radio_t s_radio;
+static half_state_t s_distant;   /* etat de la moitie d en face */
+static volatile bool s_distant_change;   /* consomme par half_link_remote_changed */
 static uint8_t    s_seq;
 
 /* Config commune aux deux bouts : même canal, même adresse, sinon rien ne
@@ -155,6 +157,19 @@ static void half_link_rx_task(void *arg)
             rf_heartbeat_t h;
             if (n && rf_decode_heartbeat(buf, n, &h)) {
                 recus++;
+                /* FUSION : l'etat recu devient celui de la moitie distante. Le
+                 * moteur le lira via half_link_remote_pressed(). */
+                {
+                    uint8_t avant[RF_HALF_BITMAP_BYTES];
+                    memcpy(avant, s_distant.bitmap, sizeof(avant));
+                    half_state_recu(&s_distant, h.bitmap,
+                                    (uint32_t)(esp_timer_get_time() / 1000));
+                    /* Ne lever le drapeau que si l'ETAT a change : la droite
+                     * emet sur changement, mais une retransmission ESB peut
+                     * livrer deux fois la meme trame. */
+                    if (memcmp(avant, s_distant.bitmap, sizeof(avant)))
+                        s_distant_change = true;
+                }
                 /* Trous de séquence : le seul témoin de ce que l'excursion
                  * coûte. seq est un octet, l'écart se calcule donc modulo 256. */
                 if (seq_amorce) {
@@ -183,8 +198,30 @@ static void half_link_rx_task(void *arg)
                 ESP_LOGW(TAG, "RX trame rejetee (len=%u, total %u)", n, (unsigned)rejetes);
             }
         }
+        /* Repli sur silence. 250 ms : au-dela, une moitie qui s est tue laisse
+         * l hote sur son dernier etat — et si c etait « Maj enfoncee », il le
+         * reste. On ne relache QUE ce que cette moitie tenait. */
+        if (half_state_timeout(&s_distant,
+                               (uint32_t)(esp_timer_get_time() / 1000), 250))
+        {
+            ESP_LOGW(TAG, "lien silencieux > 250 ms — touches de la droite relachees");
+            s_distant_change = true;
+        }
+
         vTaskDelay(pdMS_TO_TICKS(2));
     }
+}
+
+bool half_link_remote_pressed(uint8_t row, uint8_t col)
+{
+    return half_state_pressed(&s_distant, row, col);
+}
+
+bool half_link_remote_changed(void)
+{
+    if (!s_distant_change) return false;
+    s_distant_change = false;
+    return true;
 }
 
 bool half_link_rx_start(void)

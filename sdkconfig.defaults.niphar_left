@@ -45,7 +45,9 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_KASE_HALF_LINK_RX=y
 
 # Epreuve R1 : mesurer ce que coute la bascule PRX/PTX.
-CONFIG_KASE_HALF_LINK_R1=y
+# Verdict rendu (0 perte, 0,4 retransmission/paquet) — desactivee : ses paquets
+# bidons vers le dongle n ont plus lieu d etre. Reactivable pour une mesure.
+# CONFIG_KASE_HALF_LINK_R1=y
 
 # Banc du 2026-09-05 : l'alimentation batterie ne fonctionne pas, donc
 # debrancher l'USB pour faire basculer le routage n'est pas possible. On force

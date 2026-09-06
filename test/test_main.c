@@ -45,6 +45,7 @@ extern void test_kbd_route(void);
 extern void test_kbd_refresh(void);
 extern void test_niphar_keymap_span(void);
 extern void test_rf_channel_plan(void);
+extern void test_half_state(void);
 extern void test_niphar_left_pins(void);
 extern void test_niphar_right_pins(void);
 extern void test_conchodytes_pins(void);
@@ -97,6 +98,7 @@ int main(void) {
     test_kbd_refresh();
     test_niphar_keymap_span();
     test_rf_channel_plan();
+    test_half_state();
     test_niphar_left_pins();
     test_niphar_right_pins();
     test_conchodytes_pins();
