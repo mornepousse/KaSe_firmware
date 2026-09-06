@@ -96,7 +96,8 @@ périodiques. La gauche n'émet que sur changement de matrice ; elle écoute le
 reste du temps. Les collisions (les deux moitiés changeant au même instant) sont
 absorbées par les retransmissions ESB de la droite (ARC 15, ARD 500 µs).
 
-**Ce pari n'est pas prouvé et ne peut pas l'être sans matériel.** Voir §6.
+~~**Ce pari n'est pas prouvé et ne peut pas l'être sans matériel.**~~ **Prouvé
+au banc le 2026-09-06** — voir §6, R1.
 
 ## 3. Rôles et flux
 
@@ -146,12 +147,13 @@ côté** (câble droit : TX arrive sur TX), trame matrice, machine d'état de la
 poignée de main 5 V sur `LINK_5V_EN` (GPIO21). Le framing et la machine d'état
 sont de la logique pure, testés en premier. Clavier complet en filaire.
 
-**B3 — Radio esclave → maître.** Droite en PTX, gauche en PRX. Réutilise
+**B3 — Radio esclave → maître. ✅ FAIT (2026-09-06).** Droite en PTX, gauche en
+PRX. Réutilise
 `rf_driver`, `rf_packet`, `rf_pairing`, `heartbeat` — protocole KaSe intact
 (ESB 1 Mbps, CRC 16, adresses 5 octets, DPL). La jauge batterie remonte dans le
 champ `batt_dV` du heartbeat, déjà prévu au protocole.
 
-**B4 — Radio maître → dongle.** Bascule PRX/PTX sur la radio unique de la
+**B4 — Radio maître → dongle. ✅ FAIT (2026-09-05/06).** Bascule PRX/PTX sur la radio unique de la
 gauche. Brick à risque (§6).
 
 **B5 — Trackpad.** Driver IQS572 en I2C (GPIO47/48) avec handshake RDY (GPIO42),
@@ -184,7 +186,7 @@ compilation et tests host.
 
 **Phase 2 — au déballage des cartes.**
 
-5. B1b — bring-up du scan et du HID sur la gauche
+5. ✅ B1b — bring-up du scan et du HID sur la gauche (2026-09-01)
 6. B4 — **spike d'abord** : la bascule PRX/PTX tient-elle ? Le résultat commande
    B3 et toute la répartition. À lever avant d'écrire B3 pour de bon.
 7. B3 — lien esclave → maître
@@ -193,7 +195,30 @@ compilation et tests host.
 
 ## 6. Risques et plans de repli
 
-**R1 — La bascule PRX/PTX de la radio gauche (B4).** La gauche est sourde
+**R1 — La bascule PRX/PTX de la radio gauche (B4). ✅ LEVÉ le 2026-09-06.**
+
+> Mesuré au banc, excursions PRX→PTX forcées toutes les 20 ms — 50 par seconde,
+> au-delà de ce qu'une frappe rapide produit, donc un majorant :
+>
+> - **0 paquet perdu** sur 40 émissions de la moitié droite ;
+> - **0,4 retransmission par paquet**, quand l'ESB en offre 15.
+>
+> La gauche est bien sourde par moments, mais l'ESB absorbe entièrement. Le
+> repli documenté plus bas — partager le slot 2 du dongle en multiceiver —
+> **n'a pas besoin d'être activé**.
+>
+> ⚠ Réserve : pas de référence sans excursions, donc ces 0,4 peuvent inclure du
+> bruit d'environnement. Ce qui est établi : le lien tient sous la contrainte.
+> Ce qui ne l'est pas : le coût exact de la bascule seule.
+>
+> Un correctif a été nécessaire pour y arriver, et il touchait à la prémisse
+> même de §2.3 : le relais réémettait le dernier rapport HID **à 100 Hz en
+> continu**, clavier au repos. « Les émissions sont événementielles, pas
+> périodiques » était donc faux, et une moitié qui émet cent fois par seconde
+> est sourde en permanence. La réémission est désormais bornée à 5 répétitions
+> après chaque changement — 0 paquet/s au repos, mesuré.
+
+La gauche est sourde
 pendant qu'elle émet. Si les pertes de paquets de la droite sont trop nombreuses
 en frappe rapide, la répartition choisie ne tient pas.
 
