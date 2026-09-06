@@ -26,6 +26,40 @@
 #define RF_SLOT_MOUSE  1u   /* Conchodytes */
 #define RF_SLOT_COUNT  2u
 
+/* ── Plan de canaux 2,4 GHz ───────────────────────────────────────────────────
+ *
+ * Quatre liens coexistent. Ils étaient définis chacun dans son coin — le canal
+ * d'appairage dans rf_pairing.h, ceux du dongle dans les board.h — et rien
+ * n'empêchait deux d'entre eux de tomber sur la même fréquence. Une collision
+ * ne casse aucune compilation : elle se manifeste par un lien qui se tait, ou
+ * par des paquets qui passent par intermittence selon le trafic.
+ *
+ * Ils sont donc rassemblés ici, et verrouillés par test/test_rf_channel_plan.c.
+ *
+ * Espacement : le driver émet à 1 Mbps (RF_SETUP = 0x06), et le nRF24L01+
+ * Product Specification §6.3 p.25 précise qu'à ce débit « the channel occupies
+ * a bandwidth of less than 1MHz » — 1 MHz d'écart suffit donc. La contrainte de
+ * 2 MHz ne vaut qu'à 2 Mbps.
+ *
+ * Placement : le WiFi 2,4 GHz monte jusqu'à ~2473 MHz (canal 11). Les trois
+ * liens de données se tiennent au-dessus, là où la bande est nettement plus
+ * calme. Le canal d'appairage, lui, est en plein WiFi — c'est assumé : il ne
+ * sert que quelques secondes, à courte distance, et sous ARC 15.
+ *
+ * La bande ISM s'arrête à 2483,5 MHz. La puce monterait à 2525 (§6.3) mais on
+ * n'y va pas : au-delà on brouille d'autres services. */
+#define RF_CH_KBD_DONGLE    0x4C   /* 2476 MHz — moitié gauche → dongle, slot 1 */
+#define RF_CH_HALF_LINK     0x4F   /* 2479 MHz — moitié droite → moitié gauche  */
+#define RF_CH_MOUSE_DONGLE  0x52   /* 2482 MHz — Conchodytes → dongle, slot 2   */
+/* Le canal d'appairage vit dans rf_pairing.h (RF_PAIR_CHANNEL, 0x28 / 2440 MHz)
+ * et reste là-bas : il appartient au protocole d'appairage, pas au plan de
+ * fonctionnement. Le test de plan l'inclut malgré tout dans ses collisions. */
+
+/* Suffixes d'adresse, 5e octet après la base "KaSe". 0x01 clavier et 0x02
+ * souris sont ceux des slots du dongle (voir plus haut) ; 0x03 désigne le lien
+ * inter-moitiés, qui ne passe pas par le dongle. */
+#define RF_ADDR_HALF_LINK   0x03
+
 typedef enum {
     RF_SAFE_NONE = 0,
     RF_SAFE_RELEASE_KEYS,      /* rapport clavier vide */

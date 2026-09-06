@@ -50,6 +50,7 @@
 #endif
 
 #include "../boards/conchodytes/board.h"
+#include "../main/comm/rf/rf_slot.h"
 
 /* Gardes de compilation : la souris n'a ni matrice, ni écran, ni trackpad.
  * Une macro égarée ici décrirait un périphérique qui n'existe pas sur cette
@@ -112,6 +113,7 @@ static void test_conch_radio_pins(void)
      * "slot souris (Conchodytes), canal 0x52" — les deux cotes doivent
      * s'accorder ou le lien ne s'etablit jamais. */
     TEST_ASSERT_EQ(BOARD_NRF_ADDR_SUFFIX, 0x02, "suffixe d'adresse = slot souris");
+    TEST_ASSERT_EQ(BOARD_NRF_CHANNEL, RF_CH_MOUSE_DONGLE, "canal == plan de canaux");
     TEST_ASSERT_EQ(BOARD_NRF_CHANNEL,     0x52, "canal du slot 2, cf. board.h du dongle");
 }
 

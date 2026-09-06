@@ -42,6 +42,7 @@
 #endif
 
 #include "../boards/niphar_left/board.h"
+#include "../main/comm/rf/rf_slot.h"
 
 /* Garde de compilation : la gauche n'a AUCUN écran (connecteur J12 non
  * peuplé, cf. docs/NIPHARGUS_V2_HARDWARE.md). main/CMakeLists.txt:30-35 lit
@@ -224,6 +225,9 @@ static void test_left_radio_pin_aliases(void)
      * macros pour s'adresser au dongle ; elles doivent s'accorder avec
      * boards/kase_dongle/board_rf.h (radio 1) ou le lien ne s'etablit jamais.
      * Ce n'est PAS le lien droite -> gauche, qui aura ses propres macros a B3. */
+    /* Ecrit en dur dans board.h : on le relie au plan de canaux, sinon les deux
+     * derivent en silence et le lien se tait sans qu'aucun test ne bronche. */
+    TEST_ASSERT_EQ(BOARD_NRF_CHANNEL, RF_CH_KBD_DONGLE, "canal == plan de canaux");
     TEST_ASSERT_EQ(BOARD_NRF_CHANNEL,     0x4C, "canal du slot clavier, cf. board_rf.h du dongle");
     TEST_ASSERT_EQ(BOARD_NRF_ADDR_SUFFIX, 0x01, "suffixe d'adresse = slot clavier (rf_slot.h)");
     TEST_ASSERT_EQ(BOARD_NRF_SPI_CLOCK_HZ, BOARD_NRF_CLOCK_HZ, "alias horloge SPI");
