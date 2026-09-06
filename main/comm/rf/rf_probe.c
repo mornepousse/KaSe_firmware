@@ -74,9 +74,18 @@ static void rf_probe_lines(void)
         gpio_set_pull_mode(ln[i].gpio, GPIO_PULLDOWN_ONLY);
         vTaskDelay(pdMS_TO_TICKS(2));
         int pd = gpio_get_level(ln[i].gpio);
+        /* L'IRQ du nRF24 est active BASSE et repose HAUTE : une puce presente
+         * et alimentee la tient elle-meme, et un pull-down interne (~45 kOhm)
+         * ne la fait pas descendre. Lire pu=1 pd=1 sur cette ligne est donc le
+         * signe d'une radio VIVANTE, pas d'un defaut — c'est meme le seul
+         * temoin de presence que donne le test de lignes. Le libeller comme un
+         * clou ferait paniquer pour rien. Les cinq autres lignes, elles, sont
+         * pilotees par le MCU et doivent bien etre libres au repos. */
+        const bool est_irq = (ln[i].gpio == BOARD_NRF_IRQ);
         const char *verdict = (pu == 1 && pd == 0) ? "libre"
                             : (pu == 0 && pd == 0) ? "CLOUEE A LA MASSE"
-                            : (pu == 1 && pd == 1) ? "CLOUEE AU 3V3"
+                            : (pu == 1 && pd == 1) ? (est_irq ? "tenue haute (normal : IRQ au repos)"
+                                                             : "CLOUEE AU 3V3")
                             : "incoherente";
         ESP_LOGW(TAG, "%-4s (GPIO%2d) : pu=%d pd=%d -> %s",
                  ln[i].name, ln[i].gpio, pu, pd, verdict);

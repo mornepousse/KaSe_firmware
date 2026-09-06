@@ -26,3 +26,9 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # compilation ne detecte une inversion (risque R3 de la spec).
 # A retirer une fois le brochage valide : trop lent pour de la frappe reelle.
 CONFIG_KASE_MATRIX_LOG_CONSOLE=y
+
+# Bring-up 2026-09-06 : la nRF24 de la droite repond-elle ? Le probe ne fait que
+# lire des registres et une init PRX — quelques mA, compatible avec
+# l'alimentation par le LDO du FTDI, convertisseur 3,3 V dessoude.
+# A retirer une fois B3 ecrit : kbd_relay_tx initialisera alors la radio.
+CONFIG_KASE_NRF_PROBE=y

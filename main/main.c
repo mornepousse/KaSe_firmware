@@ -271,6 +271,14 @@ void app_main(void) {
 #endif /* !CONFIG_KASE_NO_KEYMAP_ENGINE */
   }
 
+#if CONFIG_KASE_NRF_PROBE
+  /* Diagnostic de banc, HORS du dispatch de rôles : la moitié droite le veut
+   * aussi, et elle n'est pas en rôle clavier. Placé avant toute init de rôle
+   * car kbd_relay_init() réclame les GPIO de la radio et ouvre le bus SPI —
+   * après quoi le test de lignes ne mesurerait plus que ses propres broches. */
+  rf_probe_run();
+#endif
+
 #if CONFIG_KASE_DEVICE_ROLE_KEYBOARD
   /* --- Keyboard-only init: display, matrix, BLE, LED strip --- */
 #if CONFIG_KASE_HAS_DISPLAY
@@ -302,13 +310,6 @@ void app_main(void) {
 
   ESP_LOGI(TAG, "Keyboard manager init");
   keyboard_manager_init();
-
-#if CONFIG_KASE_NRF_PROBE
-  /* Diagnostic de banc. DOIT tourner avant kbd_relay_init() : celui-ci reclame
-   * les GPIO de la radio et initialise le bus SPI, apres quoi le test de lignes
-   * ne mesurerait plus que ses propres broches configurees. */
-  rf_probe_run();
-#endif
 
 #if CONFIG_KASE_KBD_WIRELESS
   kbd_relay_init();
