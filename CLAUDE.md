@@ -27,7 +27,7 @@ Pour cut une release :
 1. `git commit` les changements
 2. `git tag vX.Y.Z`
 3. `git push && git push --tags`
-4. Build les 3 boards + merge full binaries
+4. Build les 7 boards + merge full binaries
 5. `glab release create vX.Y.Z <files...>`
 
 Entre deux releases : `cheni vX.Y.Z-N-gHASH-dirty` via `git describe`.
@@ -49,6 +49,13 @@ dongle garde sa radio 1 pour le clavier — la radio 2 appartient à la souris
 **Conchodytes** (`~/Documents/GitHub/Conchodytes`).
 
 Design complet : `docs/superpowers/specs/2026-08-19-niphargus-firmware-design.md`.
+
+**État au 2026-09-06** — les deux moitiés fonctionnent et tapent ensemble :
+brochage vérifié à la netlist sur les deux, lien radio inter-moitiés prouvé
+(canal 0x4F, adresse KaSe.03), fusion des keymaps, relais vers le dongle. Le
+risque R1 du design est levé (0 perte, 0,4 retransmission/paquet).
+Restent ouverts : l'alimentation batterie des deux moitiés (défaut matériel non
+diagnostiqué), B7 l'énergie, et le driver du trackpad.
 Brochage : `docs/NIPHARGUS_V2_HARDWARE.md` (source de vérité, vérifié à la netlist).
 
 ## Board variants
@@ -56,6 +63,15 @@ Brochage : `docs/NIPHARGUS_V2_HARDWARE.md` (source de vérité, vérifié à la 
 - **V1** : round SPI display (GC9A01), LED strip, pinout historique
 - **V2** : OLED I2C (SSD1306), pinout production
 - **V2D** : V2 + overrides GPIO pour prototype (COLS7/8 sur GPIO21/4 au lieu de UART0)
+- **dongle** : récepteur USB, deux radios nRF24 (slot 1 clavier, slot 2 souris),
+  ni matrice ni moteur keymap — il relaie du HID déjà fini
+- **niphar_left** : moitié GAUCHE du Niphargus, le maître. Matrice 4×7, seul
+  moteur keymap du clavier, `KEYMAP_COLS = 14` pour couvrir les deux moitiés,
+  trackpad (driver à écrire), relais vers le dongle
+- **niphar_right** : moitié DROITE, un scanner. Matrice 4×7 avec une table de
+  brochage DIFFÉRENTE de la gauche (permutations de routage), émission de sa
+  demi-matrice par radio, ni keymap ni HID
+- **conchodytes** : souris (PMW3389), slot 2 du dongle
 
 Chaque variant sous `boards/<name>/` avec `board.h`, `board_keymap.c`,
 `board_layout.c`. V2D inherit de V2 via `#include "../kase_v2/board.h"`.
@@ -72,11 +88,11 @@ idf.py -B build_kase_v2_debug -DBOARD=kase_v2_debug -DSDKCONFIG=build_kase_v2_de
 Paramètre CMake : `-DBOARD=<name>` (pas `-DBOARD_VARIANT`). Chaque board a son
 propre dossier build (`build_kase_<name>/`) **et son propre `sdkconfig`** via
 `-DSDKCONFIG=build_kase_<name>/sdkconfig` — c'est ce qui évite la fuite de
-config entre boards (cf. Workflow anti-régression). 6 boards au total : V1, V2,
-V2D, dongle, niphar_left, niphar_right. Pour tout vérifier d'un coup :
+config entre boards (cf. Workflow anti-régression). 7 boards au total : V1, V2,
+V2D, dongle, niphar_left, niphar_right, conchodytes. Pour tout vérifier d'un coup :
 `./scripts/check.sh`.
 
-**ccache** : `check.sh` exporte `IDF_CCACHE_ENABLE=1` — les 6 boards partagent
+**ccache** : `check.sh` exporte `IDF_CCACHE_ENABLE=1` — les 7 boards partagent
 la plupart des composants, donc après le 1er board les suivants réutilisent les
 objets compilés (gros gain sur le build full + pre-push). Pour tes builds
 interactifs, ajoute `export IDF_CCACHE_ENABLE=1` à ton shell (ou source-le avant
@@ -127,6 +143,13 @@ main/
 │   │   ├── cdc_binary_protocol.c # Frame parser, CRC
 │   │   ├── cdc_binary_cmds.c    # All command handlers
 │   │   └── cdc_ota.c            # OTA binary helpers
+│   ├── rf/               # nRF24 — relais dongle, lien inter-moitiés
+│   │   ├── rf_driver.c          # SPI + ESB, registres nRF24
+│   │   ├── rf_packet.h          # trames + géométrie de demi-matrice (4×7)
+│   │   ├── rf_slot.h            # slots dongle + PLAN DE CANAUX 2,4 GHz
+│   │   ├── kbd_relay_tx.c       # HID gauche → dongle (KBD_WIRELESS)
+│   │   ├── half_link.c          # lien droite → gauche (B3) + fusion
+│   │   └── rf_probe.c           # diagnostic de banc (NRF_PROBE), test de lignes
 │   ├── ble/              # Bluetooth LE HID
 │   │   └── hid_bluetooth_manager.c
 │   ├── usb/              # USB HID + CDC TinyUSB init
@@ -184,7 +207,10 @@ Encoding dans `main/input/key_definitions.h`. Ranges :
 
 Namespace : `"storage"` (défini `STORAGE_NAMESPACE`).
 Clés :
-- `keymaps`, `layout_names`
+- `keymaps`, `layout_names` — ⚠ la taille du blob suit `KEYMAP_COLS`, qui vaut
+  14 sur la moitié gauche du Niphargus contre 7 ailleurs. `load_keymaps` refuse
+  un blob de taille différente et garde les défauts compile-time : un changement
+  de dimension invalide donc les keymaps stockées, avec un avertissement.
 - `macros`
 - `key_stats`, `key_stats_tot`, `bigram_stats`, `bigram_total`
 - `td_configs`, `td_count`
@@ -338,7 +364,7 @@ secondaire).
 ## Release workflow
 
 1. Bump version via tag git `vX.Y.Z`
-2. `./scripts/check.sh` doit être vert (les 6 boards build)
+2. `./scripts/check.sh` doit être vert (les 7 boards build)
 3. Merge binaries avec `esptool.py merge_bin` pour les `_full.bin`
 4. `glab release create vX.Y.Z <files...>` (app + full)
 

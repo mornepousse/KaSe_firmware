@@ -7,7 +7,7 @@ dongle.
 
 > KeSp provides the framework. Your board definition provides the hardware specifics.
 
-**Six board targets** share the codebase via `boards/<name>/` and per-board
+**Seven board targets** share the codebase via `boards/<name>/` and per-board
 Kconfig gates: `kase_v1` (round display), `kase_v2` (OLED), `kase_v2_debug`
 (V2 + debug overrides), `kase_dongle` (USB receiver), and `niphar_left` /
 `niphar_right` (the split keyboard — see below).
@@ -186,7 +186,7 @@ idf.py -B build_kase_v2_debug -DBOARD=kase_v2_debug \
 idf.py -B build_kase_dongle   -DBOARD=kase_dongle \
        -DSDKCONFIG=build_kase_dongle/sdkconfig   build
 
-# Build all 6 boards + run host tests (anti-regression gate)
+# Build all 7 boards + run host tests (anti-regression gate)
 ./scripts/check.sh
 
 # App-only flash — preserves NVS (keymaps/macros/stats)
