@@ -25,7 +25,12 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # elle differe de la gauche par des permutations de routage, et aucune
 # compilation ne detecte une inversion (risque R3 de la spec).
 # A retirer une fois le brochage valide : trop lent pour de la frappe reelle.
-CONFIG_KASE_MATRIX_LOG_CONSOLE=y
+# RETIRE le 2026-09-06 : le brochage est valide au banc (les 11 broches
+# correspondent a la table DROITE du contrat), c'etait sa seule raison d'etre.
+# Un ESP_LOGW par changement de touche depuis le callback de scan est trop lent
+# pour de la frappe reelle, et le CLAUDE.md l'interdit. Reactivable si une
+# future carte demande la meme verification.
+# CONFIG_KASE_MATRIX_LOG_CONSOLE=y
 
 # Bring-up 2026-09-06 : la nRF24 de la droite repond-elle ? Le probe ne fait que
 # lire des registres et une init PRX — quelques mA, compatible avec
