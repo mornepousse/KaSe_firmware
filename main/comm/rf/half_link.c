@@ -1,0 +1,148 @@
+#include "half_link.h"
+#include "board.h"
+#include "rf_driver.h"
+#include "rf_packet.h"
+#include "rf_slot.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include <string.h>
+
+static const char *TAG = "half_link";
+
+static rf_radio_t s_radio;
+static uint8_t    s_seq;
+
+/* Config commune aux deux bouts : même canal, même adresse, sinon rien ne
+ * passe (nRF24L01+ PS §6.3 : « You must program a transmitter and a receiver
+ * with the same RF channel frequency to communicate with each other »). */
+static rf_radio_cfg_t half_link_cfg(void)
+{
+    rf_radio_cfg_t c = {
+        .spi_host         = BOARD_NRF_SPI_HOST,
+        .pin_mosi         = BOARD_NRF_MOSI,
+        .pin_miso         = BOARD_NRF_MISO,
+        .pin_sck          = BOARD_NRF_SCK,
+        .clock_hz         = 8 * 1000 * 1000,
+        .pin_csn          = BOARD_NRF_CSN,
+        .pin_ce           = BOARD_NRF_CE,
+        .pin_irq          = BOARD_NRF_IRQ,
+        .channel          = RF_CH_HALF_LINK,
+        .rx_addr          = { 'K', 'a', 'S', 'e' },
+        .addr_suffix      = RF_ADDR_HALF_LINK,
+        .shares_bus_first = true,
+    };
+    return c;
+}
+
+#if CONFIG_KASE_HAS_RF_TX
+bool half_link_tx_init(void)
+{
+    rf_radio_cfg_t cfg = half_link_cfg();
+    esp_err_t e = rf_driver_init_tx(&s_radio, &cfg);
+    if (e != ESP_OK || !s_radio.present) {
+        ESP_LOGE(TAG, "TX init echouee (%d) — la moitie droite restera muette", (int)e);
+        return false;
+    }
+    ESP_LOGI(TAG, "TX pret : ch=0x%02X addr=KaSe.%02X", cfg.channel, cfg.addr_suffix);
+
+    /* Rafale d'epreuve au demarrage. Sans elle, savoir si le lien porte
+     * dependrait de quelqu'un appuyant sur une touche PENDANT qu'on ecoute la
+     * console — synchronisation peu commode entre deux operateurs. Ici un
+     * simple reset suffit a obtenir le verdict.
+     *
+     * L'acquittement est MATERIEL : le nRF24 d'en face repond de lui-meme si
+     * canal et adresse concordent, sans que son logiciel intervienne. Un taux
+     * eleve prouve donc que la radio de la gauche ecoute sur le bon canal,
+     * meme si sa couche applicative avait un probleme par ailleurs. */
+    {
+        const int N = 10;
+        uint8_t bm[RF_HALF_BITMAP_BYTES];
+        memset(bm, 0, sizeof(bm));
+        int ok = 0;
+        for (int i = 0; i < N; i++) {
+            if (half_link_tx_matrix(bm)) ok++;
+            vTaskDelay(pdMS_TO_TICKS(20));
+        }
+        if (ok == 0)
+            ESP_LOGE(TAG, "epreuve : 0/%d acquittes — PERSONNE N'ECOUTE sur ch=0x%02X",
+                     N, cfg.channel);
+        else
+            ESP_LOGW(TAG, "epreuve : %d/%d acquittes — LA GAUCHE ECOUTE", ok, N);
+    }
+    return true;
+}
+
+bool half_link_tx_matrix(const uint8_t *bitmap)
+{
+    if (!s_radio.present) return false;
+    rf_heartbeat_t h;
+    memset(&h, 0, sizeof(h));
+    memcpy(h.bitmap, bitmap, RF_HALF_BITMAP_BYTES);
+    h.seq = s_seq++;
+    /* batt_dV et link_q restent a zero : la jauge est la brick B7, et la
+     * qualite de lien se calculera quand le compteur de retransmissions aura
+     * un sens (il faut un recepteur en face). */
+    uint8_t buf[16];
+    uint16_t n = rf_encode_heartbeat(buf, &h);
+    bool ack = rf_driver_send(&s_radio, buf, (uint8_t)n);
+
+    /* Instrument de banc : sans lui, on ne distingue pas « les paquets partent
+     * et sont acquittes » de « ils partent dans le vide ». Resume tous les dix
+     * envois plutot qu'une ligne par paquet — a la frappe, une ligne par paquet
+     * noierait la console et fausserait le timing. */
+    static uint32_t envois, acquittes;
+    envois++;
+    if (ack) acquittes++;
+    if ((envois % 10) == 0)
+        ESP_LOGW(TAG, "TX %u envois, %u acquittes (%u%%)",
+                 (unsigned)envois, (unsigned)acquittes,
+                 (unsigned)(acquittes * 100 / envois));
+    return ack;
+}
+#endif /* CONFIG_KASE_HAS_RF_TX */
+
+#if CONFIG_KASE_HALF_LINK_RX
+static void half_link_rx_task(void *arg)
+{
+    (void)arg;
+    uint8_t buf[32];
+    uint32_t recus = 0, rejetes = 0;
+    for (;;) {
+        if (rf_driver_rx_available(&s_radio)) {
+            uint16_t n = rf_driver_read_rx(&s_radio, buf, sizeof(buf));
+            rf_heartbeat_t h;
+            if (n && rf_decode_heartbeat(buf, n, &h)) {
+                recus++;
+                /* Journal de banc : on affiche les coordonnees pressees plutot
+                 * que le bitmap brut, pour pouvoir comparer a ce qu'on presse
+                 * physiquement sur la droite. */
+                char pos[64]; int off = 0;
+                for (int r = 0; r < RF_HALF_ROWS && off < (int)sizeof(pos) - 8; r++)
+                    for (int c = 0; c < RF_HALF_COLS && off < (int)sizeof(pos) - 8; c++)
+                        if (rf_bitmap_get(h.bitmap, (uint8_t)r, (uint8_t)c))
+                            off += snprintf(pos + off, sizeof(pos) - off, "(%d,%d)", r, c);
+                ESP_LOGW(TAG, "RX #%u seq=%u : %s", (unsigned)recus, h.seq,
+                         off ? pos : "(rien enfonce)");
+            } else {
+                rejetes++;
+                ESP_LOGW(TAG, "RX trame rejetee (len=%u, total %u)", n, (unsigned)rejetes);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+}
+
+bool half_link_rx_start(void)
+{
+    rf_radio_cfg_t cfg = half_link_cfg();
+    esp_err_t e = rf_driver_init(&s_radio, &cfg);
+    if (e != ESP_OK || !s_radio.present) {
+        ESP_LOGE(TAG, "RX init echouee (%d) — la gauche n'entendra pas la droite", (int)e);
+        return false;
+    }
+    ESP_LOGI(TAG, "RX a l'ecoute : ch=0x%02X addr=KaSe.%02X", cfg.channel, cfg.addr_suffix);
+    xTaskCreatePinnedToCore(half_link_rx_task, "half_rx", 4096, NULL, 4, NULL, 1);
+    return true;
+}
+#endif /* CONFIG_KASE_HALF_LINK_RX */

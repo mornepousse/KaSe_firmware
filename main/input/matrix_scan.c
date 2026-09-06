@@ -5,6 +5,10 @@
 #include "key_stats.h"
 #include "keyboard_config.h"
 #include "cdc_binary_protocol.h"
+#if CONFIG_KASE_HALF_LINK_TX
+#include "half_link.h"
+#include "rf_packet.h"
+#endif
 #include <esp_log.h>
 #include <stdint.h>
 #include <string.h>
@@ -68,6 +72,28 @@ static void keyboard_btn_cb(keyboard_btn_handle_t kbd_handle, keyboard_btn_repor
             if (new_state[r][c] != prev_matrix_state[r][c])
                 ESP_LOGW(TAG, "MTX r=%d c=%d %s", r, c,
                          new_state[r][c] ? "appui" : "relache");
+#endif
+
+#if CONFIG_KASE_HALF_LINK_TX
+    /* Moitié droite : émettre la demi-matrice à chaque changement. Événementiel
+     * et non périodique — c'est la prémisse §2.3 du design, et la seule qui
+     * rende le pari R1 tenable. Contexte tâche (le callback vient du pilote
+     * keyboard_button, pas d'une ISR), donc rf_driver_send peut y bloquer le
+     * temps de ses retransmissions. */
+    {
+        bool change = false;
+        for (int r = 0; r < MATRIX_ROWS && !change; r++)
+            for (int c = 0; c < MATRIX_COLS; c++)
+                if (new_state[r][c] != prev_matrix_state[r][c]) { change = true; break; }
+        if (change) {
+            uint8_t bm[RF_HALF_BITMAP_BYTES];
+            memset(bm, 0, sizeof(bm));
+            for (int r = 0; r < MATRIX_ROWS; r++)
+                for (int c = 0; c < MATRIX_COLS; c++)
+                    if (new_state[r][c]) rf_bitmap_set(bm, (uint8_t)r, (uint8_t)c, true);
+            half_link_tx_matrix(bm);
+        }
+    }
 #endif
 
     /* ── Test mode: send change events, skip HID ── */

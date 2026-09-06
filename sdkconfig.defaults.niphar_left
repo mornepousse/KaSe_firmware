@@ -28,17 +28,25 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # double l'init du bus SPI ("spi_bus_initialize: SPI bus already initialized")
 # et brouille le diagnostic. L'option reste dans l'arbre pour un futur bring-up
 # de la moitie droite, qui n'a pas encore de consommateur RF.
-CONFIG_KASE_NRF_PROBE=y
+# COUPE quand HALF_LINK_RX est actif : rf_probe reinitialise la radio avec SON
+# canal (0x4C) et SON adresse, ecrasant la config du recepteur de lien pose
+# juste avant. La gauche ecoutait alors le canal du dongle et n'acquittait rien
+# de ce que la droite emettait sur 0x4F. Une radio, un maitre.
+# CONFIG_KASE_NRF_PROBE=y
 
 # B4 — relais HID vers le dongle. Le routage est USB-first
 # (comm/usb/usb_presence.c : tud_mounted) : USB branche -> HID par USB, USB
 # absent -> radio vers le slot clavier du dongle. Pas d'ESP-NOW ni de WiFi,
 # malgre l'intitule du Kconfig qui est un vestige.
-CONFIG_KASE_KBD_WIRELESS=y
+# ETAPE 1 de B3 : la gauche ECOUTE la droite. Le relais vers le dongle est
+# coupe — la meme radio ne peut pas faire les deux, c'est tout le risque R1.
+# On prouve d'abord que le lien porte ; la bascule PRX/PTX vient ensuite.
+# CONFIG_KASE_KBD_WIRELESS=y
+CONFIG_KASE_HALF_LINK_RX=y
 
 # Banc du 2026-09-05 : l'alimentation batterie ne fonctionne pas, donc
 # debrancher l'USB pour faire basculer le routage n'est pas possible. On force
 # le HID sur la radio, USB branche, pour eprouver le lien vers le dongle.
 # A RETIRER une fois l'alimentation batterie reparee : tant que c'est actif, la
 # moitie gauche ne tape plus par son propre USB.
-CONFIG_KASE_RF_FORCE_ROUTE=y
+# CONFIG_KASE_RF_FORCE_ROUTE=y   (sans relais, le forcage n'a plus d'objet)

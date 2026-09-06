@@ -239,6 +239,16 @@ if(CONFIG_KASE_KBD_WIRELESS AND CONFIG_KASE_HAS_DISPLAY)
     list(APPEND srcs "comm/rf/v2d_sleep.c")
 endif()
 
+# Lien radio inter-moities (B3). rf_driver.c est deja tire par les gardes RF
+# ci-dessus quand l'un des deux bouts est actif.
+if(CONFIG_KASE_HALF_LINK_TX OR CONFIG_KASE_HALF_LINK_RX)
+    list(APPEND srcs "comm/rf/half_link.c")
+    if(NOT CONFIG_KASE_KBD_WIRELESS AND NOT CONFIG_KASE_HAS_RF_RX
+       AND NOT CONFIG_KASE_HAS_RF_TX AND NOT CONFIG_KASE_NRF_PROBE)
+        list(APPEND srcs "comm/rf/rf_driver.c")
+    endif()
+endif()
+
 # NRF probe (la radio repond-elle ?) — diagnostic de bring-up, explicite.
 # Les gardes ci-dessous evitent de lister rf_driver.c deux fois : il est deja
 # tire par KBD_WIRELESS, HAS_RF_RX et HAS_RF_TX.
@@ -289,6 +299,12 @@ if(CONFIG_KASE_KBD_WIRELESS AND NOT CONFIG_KASE_HAS_RF_RX)
 endif()
 
 if(CONFIG_KASE_NRF_PROBE AND NOT CONFIG_KASE_HAS_RF_RX AND NOT CONFIG_KASE_KBD_WIRELESS)
+    list(APPEND priv_requires esp_driver_spi)
+endif()
+
+if((CONFIG_KASE_HALF_LINK_TX OR CONFIG_KASE_HALF_LINK_RX)
+   AND NOT CONFIG_KASE_HAS_RF_RX AND NOT CONFIG_KASE_KBD_WIRELESS
+   AND NOT CONFIG_KASE_NRF_PROBE)
     list(APPEND priv_requires esp_driver_spi)
 endif()
 

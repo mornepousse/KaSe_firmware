@@ -31,4 +31,9 @@ CONFIG_KASE_MATRIX_LOG_CONSOLE=y
 # lire des registres et une init PRX — quelques mA, compatible avec
 # l'alimentation par le LDO du FTDI, convertisseur 3,3 V dessoude.
 # A retirer une fois B3 ecrit : kbd_relay_tx initialisera alors la radio.
-CONFIG_KASE_NRF_PROBE=y
+# Probe coupe : half_link prend la radio desormais, et les deux se
+# disputeraient le bus SPI. Le reactiver ponctuellement pour un diagnostic.
+# CONFIG_KASE_NRF_PROBE=y
+
+# B3 : la droite emet sa demi-matrice vers la gauche.
+CONFIG_KASE_HALF_LINK_TX=y

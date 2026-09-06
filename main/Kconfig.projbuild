@@ -81,6 +81,27 @@ config KASE_HAS_LOCAL_MATRIX
         seule fonction, la spec la decrit comme "un scanner qui remonte sa
         matrice brute". Elle n'a en revanche ni moteur keymap ni sortie HID.
 
+config KASE_HALF_LINK_TX
+    bool "Lien inter-moities : emettre la demi-matrice (moitie droite)"
+    default n
+    depends on KASE_HAS_RF_TX
+    help
+        Brick B3. La moitie droite emet sa demi-matrice sur le canal du lien
+        (RF_CH_HALF_LINK, cf. rf_slot.h) a chaque changement. Elle n'a ni moteur
+        keymap ni sortie HID : c'est un scanner.
+
+config KASE_HALF_LINK_RX
+    bool "Lien inter-moities : ecouter la demi-matrice (moitie gauche)"
+    default n
+    help
+        Brick B3, autre bout. La moitie gauche ecoute en PRX et journalise ce
+        qu'elle recoit.
+
+        ⚠ Ne traite PAS le risque R1 : tant que cette option est active la
+        gauche ECOUTE, elle n'emet donc pas vers le dongle. La bascule PRX/PTX
+        est l'etape suivante. On prouve d'abord que le lien porte — sinon un
+        echec de bascule serait indiscernable d'un lien qui ne marche pas.
+
 config KASE_RF_FORCE_ROUTE
     bool "Forcer le HID sur la radio meme quand l'USB est branche"
     default n

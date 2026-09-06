@@ -46,6 +46,10 @@
 #include "rf_probe.h"
 #endif
 
+#if CONFIG_KASE_HALF_LINK_TX || CONFIG_KASE_HALF_LINK_RX
+#include "half_link.h"
+#endif
+
 #if CONFIG_KASE_HAS_RF_RX
 #include "trackpad.h"
 #endif
@@ -271,6 +275,13 @@ void app_main(void) {
 #endif /* !CONFIG_KASE_NO_KEYMAP_ENGINE */
   }
 
+#if CONFIG_KASE_HALF_LINK_RX
+  /* Moitié gauche à l'écoute de la droite. Placé hors du dispatch de rôles pour
+   * la même raison que le probe, et avant kbd_relay_init() qui réclamerait la
+   * même radio. */
+  half_link_rx_start();
+#endif
+
 #if CONFIG_KASE_NRF_PROBE
   /* Diagnostic de banc, HORS du dispatch de rôles : la moitié droite le veut
    * aussi, et elle n'est pas en rôle clavier. Placé avant toute init de rôle
@@ -384,6 +395,11 @@ void app_main(void) {
    * invérifiable. L'émission vers la gauche est le ressort de B3, pas encore
    * écrite. */
   ESP_LOGI(TAG, "Role esclave Niphargus : scan matrice seul");
+#if CONFIG_KASE_HALF_LINK_TX
+  /* AVANT matrix_setup() : le callback de scan émettra dès le premier appui,
+   * et il lui faut une radio prête. */
+  half_link_tx_init();
+#endif
   rtc_matrix_deinit();
   matrix_setup();
 #endif /* device role */
