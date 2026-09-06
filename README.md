@@ -9,20 +9,35 @@ dongle.
 
 **Seven board targets** share the codebase via `boards/<name>/` and per-board
 Kconfig gates: `kase_v1` (round display), `kase_v2` (OLED), `kase_v2_debug`
-(V2 + debug overrides), `kase_dongle` (USB receiver), and `niphar_left` /
-`niphar_right` (the split keyboard — see below).
+(V2 + debug overrides), `kase_dongle` (USB receiver), `conchodytes` (a PMW3389
+mouse on the dongle's second radio slot), and `niphar_left` / `niphar_right`
+(the split keyboard — see below).
 
 ---
 
 ## Work in progress — Niphargus, and what it changed
 
 The split keyboard is being redesigned as
-**[Niphargus](https://github.com/mornepousse/Niphargus)**: two ESP32-S3 halves
-joined by a wired TRRS link, a nRF24 radio to the dongle, an Azoteq TPS43
-trackpad on the left, a Sharp Memory LCD on the right. **No hardware exists
-yet** — the boards build, and everything below the driver line is pure logic
-covered by host tests. Configuration and updates go over USB; there is no WiFi
-and no BLE on either half.
+**[Niphargus](https://github.com/mornepousse/Niphargus)**: two ESP32-S3 halves,
+an Azoteq TPS43 trackpad on the left, a Sharp Memory LCD on the right.
+Configuration and updates go over USB; there is no WiFi and no BLE on either
+half — the power budget forbids it.
+
+The halves talk over **nRF24 radio** (channel 0x4F), and the left half relays
+finished HID reports to the dongle on its own channel. A wired TRRS link is the
+planned alternative; its framing and 5 V handshake are written and host-tested,
+but no cable has been received.
+
+**Hardware status — 2026-09-06.** Both halves exist and work together: pin
+tables verified against the netlist on each, matrix scanning, the radio link
+between them, keymap fusion, and HID relayed to the dongle. Typing on either
+half reaches the host.
+
+Three things are still open. **Battery power fails on both halves** — a hardware
+fault around the 3.3 V converter, not yet diagnosed; the boards currently run
+from USB or a probe's supply. **The trackpad has no driver.** **Sleep (< 50 µA)
+is unwritten** — it needs RTC-domain scanning and EXT1 wake, and nothing of that
+exists yet.
 
 Two decisions shape the whole codebase, and they are worth stating plainly
 because both replaced an earlier design that is still visible in the git history.
